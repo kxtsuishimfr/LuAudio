@@ -2,6 +2,40 @@
     "version": 3,
     "configurePresets": [
         {
+            "name": "android-base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "E:/Android/Sdk/ndk/29.0.14206865/build/cmake/android.toolchain.cmake",
+                "CMAKE_SYSTEM_VERSION": "26",
+                "CMAKE_ANDROID_ARCH_ABI": "arm64-v8a",
+                "CMAKE_ANDROID_NDK": "E:/Android/Sdk/ndk/29.0.14206865"
+            }
+        },
+        {
+            "name": "android-arm64-debug",
+            "displayName": "Android arm64 Debug",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "android-arm64-release",
+            "displayName": "Android arm64 Release",
+            "inherits": "android-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "windows-base",
             "hidden": true,
             "generator": "Ninja",

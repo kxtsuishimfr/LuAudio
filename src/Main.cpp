@@ -1,9 +1,6 @@
-﻿#include <LuAudio/LuAudio.h>
-
-using namespace std;
+﻿#include <LuAudio/Common.h>
 
 int main()
 {
-	cout << "Hello CMake." << endl;
 	return 0;
 }

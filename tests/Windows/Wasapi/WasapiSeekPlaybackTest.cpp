@@ -41,7 +41,7 @@ void SeekTo(LuAudio::Audio::AudioPlayer& player, std::uint64_t frame, const char
 
 void SeekRelative(LuAudio::Audio::AudioPlayer& player, std::int64_t frameDelta)
 {
-    const auto current = player.RequestedPosition();
+    const auto current = player.Position();
     const auto total = player.FrameCount();
     std::uint64_t target = current;
     if (frameDelta < 0) {

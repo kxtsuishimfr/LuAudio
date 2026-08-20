@@ -69,6 +69,38 @@ Result AudioPlayer::Start()
     return backend_.Start();
 }
 
+Result AudioPlayer::Pause()
+{
+    if (!open_) {
+        return Result::Failure(ResultCode::InvalidState, "Audio player is not open");
+    }
+    if (paused_) {
+        return Result::Success();
+    }
+
+    const auto result = backend_.Stop();
+    if (result.Succeeded()) {
+        paused_ = true;
+    }
+    return result;
+}
+
+Result AudioPlayer::Resume()
+{
+    if (!open_) {
+        return Result::Failure(ResultCode::InvalidState, "Audio player is not open");
+    }
+    if (!paused_) {
+        return Result::Success();
+    }
+
+    const auto result = backend_.Start();
+    if (result.Succeeded()) {
+        paused_ = false;
+    }
+    return result;
+}
+
 Result AudioPlayer::Stop()
 {
     if (!open_) {
@@ -86,6 +118,7 @@ void AudioPlayer::Close() noexcept
     backend_.Close();
     backend_.SetCallback({});
     reader_.reset();
+    paused_ = false;
     seekPending_.store(false, std::memory_order_release);
     endOfFile_.store(false, std::memory_order_release);
     open_ = false;
@@ -109,6 +142,11 @@ Result AudioPlayer::Seek(std::uint64_t frame)
 Result AudioPlayer::Rewind()
 {
     return Seek(0);
+}
+
+void AudioPlayer::SetEffectChain(AudioEffectChain* chain) noexcept
+{
+    effectChain_ = chain;
 }
 
 std::uint64_t AudioPlayer::Position() const noexcept
@@ -142,6 +180,11 @@ bool AudioPlayer::IsOpen() const noexcept
     return open_;
 }
 
+bool AudioPlayer::IsPaused() const noexcept
+{
+    return paused_;
+}
+
 void AudioPlayer::Render(AudioBuffer& buffer) noexcept
 {
     if (!reader_) {
@@ -161,6 +204,10 @@ void AudioPlayer::Render(AudioBuffer& buffer) noexcept
 
     const auto result = reader_->Read(buffer);
     if (!result.Succeeded()) {
+        buffer.Clear();
+        return;
+    }
+    if (effectChain_ != nullptr && !effectChain_->Process(buffer)) {
         buffer.Clear();
         return;
     }

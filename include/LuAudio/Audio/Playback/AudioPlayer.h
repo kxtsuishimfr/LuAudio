@@ -6,6 +6,7 @@
 #include <LuAudio/Common.h>
 
 #include <LuAudio/Audio/Contracts/IAudioBackend.h>
+#include <LuAudio/Audio/Processing/AudioEffectChain.h>
 #include <LuAudio/Audio/Sources/IAudioReader.h>
 
 namespace LuAudio::Audio {
@@ -39,6 +40,16 @@ public:
      */
     Result Start();
     /**
+     * @summary Pauses backend rendering without discarding source or effect state.
+     * @returns Operation result.
+     */
+    Result Pause();
+    /**
+     * @summary Resumes backend rendering from the current source position.
+     * @returns Operation result.
+     */
+    Result Resume();
+    /**
      * @summary Stops playback without discarding the source position.
      * @returns Operation result.
      */
@@ -57,6 +68,12 @@ public:
      * @returns Operation result for accepting the request.
      */
     Result Rewind();
+
+    /**
+     * @summary Attaches a non-owning effect chain used during rendering.
+     * @param chain Chain to process after source reads, or nullptr to disable effects.
+     */
+    void SetEffectChain(AudioEffectChain* chain) noexcept;
 
     /**
      * @summary Gets the last source position applied to rendering.
@@ -88,6 +105,8 @@ public:
      * @returns True when the player owns an open reader.
      */
     bool IsOpen() const noexcept;
+    /** @summary Checks whether playback is paused. */
+    bool IsPaused() const noexcept;
 
 private:
     void Render(AudioBuffer& buffer) noexcept;
@@ -99,6 +118,8 @@ private:
     std::atomic<std::uint64_t> requestedPosition_{0};
     std::atomic<bool> seekPending_{false};
     std::atomic<bool> endOfFile_{false};
+    AudioEffectChain* effectChain_ = nullptr;
+    bool paused_ = false;
     bool open_ = false;
 };
 

@@ -9,6 +9,9 @@ SCRIPT_PATH = Path(__file__).resolve()
 ROOT_DIR = SCRIPT_PATH.parents[3]
 ANDROID_PROJECT_DIR = ROOT_DIR / "tests" / "Android"
 APK_PATH = ANDROID_PROJECT_DIR / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
+TEST_AUDIO_PATH = ROOT_DIR / "tests" / "Audios" / "sample_1.wav"
+DEVICE_AUDIO_DIR = "/sdcard/LuAudio_Tests"
+DEVICE_AUDIO_PATH = f"{DEVICE_AUDIO_DIR}/sample_1.wav"
 LOCAL_PROPERTIES_PATH = ANDROID_PROJECT_DIR / "local.properties"
 ANDROID_SDK_PATH = Path(r"E:\Android\Sdk")
 PACKAGE_NAME = "com.luaudio.androidtests"
@@ -45,6 +48,23 @@ def configure_android_sdk() -> None:
         encoding="utf-8",
     )
     print(f"Android SDK: {ANDROID_SDK_PATH}")
+
+
+def push_test_audio(serial: str | None) -> None:
+    if not TEST_AUDIO_PATH.is_file():
+        raise RuntimeError(f"Test audio was not found: {TEST_AUDIO_PATH}")
+
+    mkdir_command = ["adb"]
+    if serial:
+        mkdir_command.extend(["-s", serial])
+    mkdir_command.extend(["shell", "mkdir", "-p", DEVICE_AUDIO_DIR])
+    run(mkdir_command)
+
+    push_command = ["adb"]
+    if serial:
+        push_command.extend(["-s", serial])
+    push_command.extend(["push", str(TEST_AUDIO_PATH), DEVICE_AUDIO_PATH])
+    run(push_command)
 
 
 def find_device(requested_serial: str | None) -> str | None:
@@ -89,6 +109,7 @@ def main() -> int:
             install_command.extend(["-s", serial])
         install_command.extend(["install", "-r", str(APK_PATH)])
         run(install_command)
+        push_test_audio(serial)
 
         if not args.no_launch:
             launch_command = ["adb"]

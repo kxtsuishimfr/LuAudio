@@ -11,13 +11,14 @@ include(CTest)
 
 option(LUAUDIO_ANDROID_TESTS "Build the Android test runner" OFF)
 
-set(LUAUDIO_SOURCES
+set(LUAUDIO_CORE_SOURCES
     "src/Audio/Contracts/AudioFormat.cpp"
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
     "src/Audio/Contracts/Result.cpp"
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
+    "src/Audio/Processing/AudioEffectChain.cpp"
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/Mp3FileReader.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
@@ -28,6 +29,8 @@ set(LUAUDIO_SOURCES
     "include/LuAudio/Audio/Contracts/Result.h"
     "include/LuAudio/Audio/Playback/AudioPlayer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
+    "include/LuAudio/Audio/Processing/AudioEffectChain.h"
+    "include/LuAudio/Audio/Contracts/IAudioEffect.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/Mp3FileReader.h"
     "include/LuAudio/Audio/Sources/WavFileReader.h"
@@ -38,56 +41,114 @@ set(LUAUDIO_SOURCES
     "include/LuAudio/Utils/Diagnostics/Log.h"
 )
 
-if (WIN32)
-    list(APPEND LUAUDIO_SOURCES
-        "src/Providers/Windows/WAudioDecoder.cpp"
-        "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
-        "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
-        "include/LuAudio/Providers/Windows/WAudioDecoder.h"
-        "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
-        "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
-    )
-endif()
+add_library(LuAudioCore SHARED ${LUAUDIO_CORE_SOURCES})
 
-add_library(LuAudio SHARED ${LUAUDIO_SOURCES})
-
-set_target_properties(LuAudio PROPERTIES
-    OUTPUT_NAME "LuAudio"
+set_target_properties(LuAudioCore PROPERTIES
+    OUTPUT_NAME "AudioCore"
 )
 
 if (WIN32)
-    set_target_properties(LuAudio PROPERTIES
+    set_target_properties(LuAudioCore PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
     )
 endif()
 
-target_include_directories(LuAudio PUBLIC
+target_include_directories(LuAudioCore PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-if (WIN32)
-    target_link_libraries(LuAudio PRIVATE ole32 avrt mfplat mfreadwrite mfuuid)
+if (CMAKE_VERSION VERSION_GREATER 3.12)
+    set_property(TARGET LuAudioCore PROPERTY CXX_STANDARD 20)
 endif()
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-    set_property(TARGET LuAudio PROPERTY CXX_STANDARD 20)
+add_library(LuAudioPluginHost SHARED
+    "src/Plugins/PluginEffectAdapter.cpp"
+    "src/Plugins/PluginHandle.cpp"
+    "src/Plugins/PluginManager.cpp"
+    "include/LuAudio/Plugins/PluginAbi.h"
+    "include/LuAudio/Plugins/PluginEffectAdapter.h"
+    "include/LuAudio/Plugins/PluginHandle.h"
+    "include/LuAudio/Plugins/PluginManager.h"
+)
+
+target_include_directories(LuAudioPluginHost PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_link_libraries(LuAudioPluginHost PRIVATE LuAudioCore)
+target_compile_features(LuAudioPluginHost PRIVATE cxx_std_20)
+
+if (WIN32)
+    set_target_properties(LuAudioPluginHost PROPERTIES
+        OUTPUT_NAME "PluginHost"
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+    )
+endif()
+
+if (WIN32)
+    add_library(LuAudioWindowsProvider SHARED
+        "src/Providers/Windows/WAudioDecoder.cpp"
+        "src/Providers/Windows/WPluginProvider.cpp"
+        "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
+        "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
+        "include/LuAudio/Providers/Windows/WAudioDecoder.h"
+        "include/LuAudio/Providers/Windows/WPluginProvider.h"
+        "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
+        "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
+    )
+    target_include_directories(LuAudioWindowsProvider PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_link_libraries(LuAudioWindowsProvider PRIVATE
+        LuAudioCore ole32 avrt mfplat mfreadwrite mfuuid
+    )
+    target_compile_features(LuAudioWindowsProvider PRIVATE cxx_std_20)
+    set_target_properties(LuAudioWindowsProvider PROPERTIES
+        OUTPUT_NAME "WPluginProvider"
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+    )
+
+    add_library(LuAudio INTERFACE)
+    target_link_libraries(LuAudio INTERFACE LuAudioCore LuAudioWindowsProvider)
+    add_library(LuAudio::Core ALIAS LuAudioCore)
+    add_library(LuAudio::PluginHost ALIAS LuAudioPluginHost)
+    add_library(LuAudio::WindowsProvider ALIAS LuAudioWindowsProvider)
 endif()
 
 if (ANDROID)
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Oboe" "${CMAKE_CURRENT_BINARY_DIR}/oboe-build")
 
-    add_library(LuAudioOboe SHARED
+    add_library(LuAudioTestPlugin SHARED
+        "tests/Android/PluginTest.cpp"
+    )
+    target_include_directories(LuAudioTestPlugin PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+    )
+    target_compile_features(LuAudioTestPlugin PRIVATE cxx_std_20)
+
+    add_library(LuAudioAndroidProvider SHARED
         "src/Providers/Android/AAudioDecoder.cpp"
+        "src/Providers/Android/APluginProvider.cpp"
         "src/Providers/Android/Oboe/OboeBackend.cpp"
         "include/LuAudio/Providers/Android/AAudioDecoder.h"
+        "include/LuAudio/Providers/Android/APluginProvider.h"
         "include/LuAudio/Providers/Android/Oboe/OboeBackend.h"
     )
 
-    target_include_directories(LuAudioOboe PRIVATE
+    target_include_directories(LuAudioAndroidProvider PUBLIC
+        "${PROJECT_SOURCE_DIR}/include"
+    )
+    target_include_directories(LuAudioAndroidProvider PRIVATE
         "${PROJECT_SOURCE_DIR}/third_party/Oboe/include"
     )
-    target_link_libraries(LuAudioOboe PRIVATE LuAudio oboe mediandk)
-    target_compile_features(LuAudioOboe PRIVATE cxx_std_20)
+    target_link_libraries(LuAudioAndroidProvider PRIVATE LuAudioCore oboe mediandk)
+    target_compile_features(LuAudioAndroidProvider PRIVATE cxx_std_20)
+
+    add_library(LuAudioOboe ALIAS LuAudioAndroidProvider)
+    add_library(LuAudio INTERFACE)
+    target_link_libraries(LuAudio INTERFACE LuAudioCore LuAudioAndroidProvider)
+    add_library(LuAudio::Core ALIAS LuAudioCore)
+    add_library(LuAudio::PluginHost ALIAS LuAudioPluginHost)
+    add_library(LuAudio::AndroidProvider ALIAS LuAudioAndroidProvider)
 
     if (LUAUDIO_ANDROID_TESTS)
         add_library(native-lib SHARED
@@ -96,7 +157,15 @@ if (ANDROID)
         target_include_directories(native-lib PRIVATE
             "${PROJECT_SOURCE_DIR}/include"
         )
-        target_link_libraries(native-lib PRIVATE LuAudioOboe LuAudio log android)
+        target_link_libraries(native-lib PRIVATE
+            LuAudioCore
+            LuAudioAndroidProvider
+            LuAudioPluginHost
+            LuAudioTestPlugin
+            log
+            android
+        )
+        add_dependencies(native-lib LuAudioTestPlugin)
         target_compile_features(native-lib PRIVATE cxx_std_20)
     endif()
 endif()
@@ -112,6 +181,30 @@ if (BUILD_TESTING AND WIN32)
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(GoogleTest)
 
+    add_library(LuAudioTestPlugin SHARED
+        "tests/Windows/Plugins/TestPlugin.cpp"
+    )
+    target_include_directories(LuAudioTestPlugin PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_compile_features(LuAudioTestPlugin PRIVATE cxx_std_20)
+
+    add_executable(LuAudioPluginTests
+        "tests/Windows/Plugins/AudioEffectChainTests.cpp"
+        "tests/Windows/Plugins/PluginManagerTests.cpp"
+    )
+    target_link_libraries(LuAudioPluginTests PRIVATE
+        LuAudioCore
+        LuAudioPluginHost
+        LuAudioWindowsProvider
+        GTest::gtest_main
+    )
+    target_compile_features(LuAudioPluginTests PRIVATE cxx_std_20)
+    target_compile_definitions(LuAudioPluginTests PRIVATE
+        LUAUDIO_TEST_PLUGIN_PATH="$<TARGET_FILE:LuAudioTestPlugin>"
+    )
+    add_dependencies(LuAudioPluginTests LuAudioTestPlugin)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -121,6 +214,7 @@ if (BUILD_TESTING AND WIN32)
 
     include(GoogleTest)
     gtest_discover_tests(LuAudioProviderTests)
+    gtest_discover_tests(LuAudioPluginTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"
@@ -139,4 +233,10 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioWasapiSeekPlaybackTest PRIVATE LuAudio)
     target_compile_features(LuAudioWasapiSeekPlaybackTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioReverbSeekTest
+        "tests/Windows/Plugins/ReverbSeekPlaybackTest.cpp"
+    )
+    target_link_libraries(LuAudioReverbSeekTest PRIVATE LuAudio)
+    target_compile_features(LuAudioReverbSeekTest PRIVATE cxx_std_20)
 endif()

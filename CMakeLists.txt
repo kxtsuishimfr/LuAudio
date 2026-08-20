@@ -16,6 +16,8 @@ set(LUAUDIO_CORE_SOURCES
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
     "src/Audio/Contracts/Result.cpp"
+    "src/Audio/Playback/AudioMixer.cpp"
+    "src/Audio/Playback/AudioMixerRender.cpp"
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Processing/AudioEffectChain.cpp"
@@ -27,6 +29,7 @@ set(LUAUDIO_CORE_SOURCES
     "include/LuAudio/Audio/Contracts/AudioStreamConfig.h"
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
     "include/LuAudio/Audio/Contracts/Result.h"
+    "include/LuAudio/Audio/Playback/AudioMixer.h"
     "include/LuAudio/Audio/Playback/AudioPlayer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
     "include/LuAudio/Audio/Processing/AudioEffectChain.h"
@@ -117,14 +120,6 @@ endif()
 if (ANDROID)
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Oboe" "${CMAKE_CURRENT_BINARY_DIR}/oboe-build")
 
-    add_library(LuAudioTestPlugin SHARED
-        "tests/Android/PluginTest.cpp"
-    )
-    target_include_directories(LuAudioTestPlugin PRIVATE
-        "${PROJECT_SOURCE_DIR}/include"
-    )
-    target_compile_features(LuAudioTestPlugin PRIVATE cxx_std_20)
-
     add_library(LuAudioAndroidProvider SHARED
         "src/Providers/Android/AAudioDecoder.cpp"
         "src/Providers/Android/APluginProvider.cpp"
@@ -160,12 +155,9 @@ if (ANDROID)
         target_link_libraries(native-lib PRIVATE
             LuAudioCore
             LuAudioAndroidProvider
-            LuAudioPluginHost
-            LuAudioTestPlugin
             log
             android
         )
-        add_dependencies(native-lib LuAudioTestPlugin)
         target_compile_features(native-lib PRIVATE cxx_std_20)
     endif()
 endif()
@@ -205,6 +197,12 @@ if (BUILD_TESTING AND WIN32)
     )
     add_dependencies(LuAudioPluginTests LuAudioTestPlugin)
 
+    add_executable(LuAudioMixerTests
+        "tests/Windows/AudioMixerTests.cpp"
+    )
+    target_link_libraries(LuAudioMixerTests PRIVATE LuAudioCore GTest::gtest_main)
+    target_compile_features(LuAudioMixerTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -215,6 +213,7 @@ if (BUILD_TESTING AND WIN32)
     include(GoogleTest)
     gtest_discover_tests(LuAudioProviderTests)
     gtest_discover_tests(LuAudioPluginTests)
+    gtest_discover_tests(LuAudioMixerTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"
@@ -233,6 +232,12 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioWasapiSeekPlaybackTest PRIVATE LuAudio)
     target_compile_features(LuAudioWasapiSeekPlaybackTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioWasapiMixerPlaybackTest
+        "tests/Windows/Wasapi/WasapiMixerPlaybackTest.cpp"
+    )
+    target_link_libraries(LuAudioWasapiMixerPlaybackTest PRIVATE LuAudio)
+    target_compile_features(LuAudioWasapiMixerPlaybackTest PRIVATE cxx_std_20)
 
     add_executable(LuAudioReverbSeekTest
         "tests/Windows/Plugins/ReverbSeekPlaybackTest.cpp"

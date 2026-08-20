@@ -55,9 +55,9 @@ bool AudioEffectChain::SetBypassed(EffectId id, bool bypassed) noexcept
     return true;
 }
 
-bool AudioEffectChain::Process(AudioBuffer& buffer) noexcept
+bool AudioEffectChain::Process(AudioBuffer& buffer) const noexcept
 {
-    for (Entry& entry : effects_) {
+    for (const Entry& entry : effects_) {
         if (entry.active && !entry.bypassed && !entry.effect->Process(buffer)) {
             return false;
         }

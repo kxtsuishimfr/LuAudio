@@ -1,29 +1,25 @@
 package com.luaudio.androidtests;
 
 import android.app.Activity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
+
 public final class MainActivity extends Activity {
+    private static final int AUDIO_PERMISSION_REQUEST = 1001;
+
     static {
         System.loadLibrary("native-lib");
-        System.loadLibrary("LuAudioTestPlugin");
     }
 
-    private static native String nativeStartPlayback();
-    private static native String nativeToggleReverb(boolean enabled);
-    private static native String nativeTogglePause();
-    private static native String nativeSeek(long frame);
-    private static native String nativeSeekRelative(long seconds);
-    private static native String nativeStatus();
-    private static native String nativeRunPluginTests(String pluginPath);
-    private static native void nativeStopPlayback();
-
     private TextView output;
-    private boolean reverbEnabled = true;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -37,27 +33,60 @@ public final class MainActivity extends Activity {
         output.setText("Android playback is ready.");
         controls.addView(output, new LinearLayout.LayoutParams(-1, 0, 1.0f));
 
-        addButton(controls, "Start sample_1.wav", () -> runCommand(MainActivity::nativeStartPlayback));
-        addButton(controls, "Pause / resume", () -> runCommand(MainActivity::nativeTogglePause));
-        addButton(controls, "Toggle reverb", () -> {
-            reverbEnabled = !reverbEnabled;
-            runCommand(() -> nativeToggleReverb(reverbEnabled));
+        File testDirectory = new File(Environment.getExternalStorageDirectory(), "LuAudio_Tests");
+        addButton(controls, "Request audio permission", this::requestAudioPermission);
+        addButton(controls, "Start WAV + MP3 mixer", () -> runCommand(
+            () -> nativeRunAudioMixerPlaybackTest(testDirectory.getAbsolutePath())));
+        addButton(controls, "Stop mixer", () -> runCommand(MainActivity::nativeStopAudioMixer));
+        addButton(controls, "Pause/resume WAV", () -> {
+            wavPaused = !wavPaused;
+            runCommand(() -> nativeSetWavPaused(wavPaused));
         });
-        addButton(controls, "Seek middle", () -> runCommand(() -> nativeSeek(-1)));
-        addButton(controls, "Seek backward 5 seconds", () -> runCommand(() -> nativeSeekRelative(-5)));
-        addButton(controls, "Seek forward 5 seconds", () -> runCommand(() -> nativeSeekRelative(5)));
-        addButton(controls, "Seek end", () -> runCommand(() -> nativeSeek(-2)));
-        addButton(controls, "Refresh status", () -> runCommand(MainActivity::nativeStatus));
-        addButton(controls, "Run plugin test", () -> runCommand(
-            () -> nativeRunPluginTests("libLuAudioTestPlugin.so")));
-
+        addButton(controls, "Pause/resume MP3", () -> {
+            mp3Paused = !mp3Paused;
+            runCommand(() -> nativeSetMp3Paused(mp3Paused));
+        });
+        addButton(controls, "WAV seek -5s", () -> runCommand(() -> nativeSeekWav(false)));
+        addButton(controls, "WAV seek +5s", () -> runCommand(() -> nativeSeekWav(true)));
+        addButton(controls, "MP3 seek -5s", () -> runCommand(() -> nativeSeekMp3(false)));
+        addButton(controls, "MP3 seek +5s", () -> runCommand(() -> nativeSeekMp3(true)));
+        addButton(controls, "Stop WAV source", () -> runCommand(MainActivity::nativeStopWav));
+        addButton(controls, "Stop MP3 source", () -> runCommand(MainActivity::nativeStopMp3));
         setContentView(controls);
     }
 
+    private static native String nativeRunAudioMixerPlaybackTest(String directory);
+    private static native String nativeStopAudioMixer();
+    private static native String nativeSetWavPaused(boolean paused);
+    private static native String nativeSetMp3Paused(boolean paused);
+    private static native String nativeSeekWav(boolean forward);
+    private static native String nativeSeekMp3(boolean forward);
+    private static native String nativeStopWav();
+    private static native String nativeStopMp3();
+
+    private boolean wavPaused;
+    private boolean mp3Paused;
+
+    private void requestAudioPermission() {
+        String permission = Build.VERSION.SDK_INT >= 33
+            ? Manifest.permission.READ_MEDIA_AUDIO
+            : Manifest.permission.READ_EXTERNAL_STORAGE;
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            output.setText("Audio permission granted.");
+        } else {
+            requestPermissions(new String[] {permission}, AUDIO_PERMISSION_REQUEST);
+        }
+    }
+
     @Override
-    protected void onDestroy() {
-        nativeStopPlayback();
-        super.onDestroy();
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == AUDIO_PERMISSION_REQUEST && grantResults.length > 0 &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            output.setText("Audio permission granted.");
+        } else if (requestCode == AUDIO_PERMISSION_REQUEST) {
+            output.setText("Audio permission denied.");
+        }
     }
 
     private void runCommand(java.util.function.Supplier<String> command) {

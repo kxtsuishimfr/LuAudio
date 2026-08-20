@@ -44,7 +44,7 @@ public:
      * @param buffer Buffer to process in place.
      * @returns False when an effect fails; later effects are not called.
      */
-    bool Process(AudioBuffer& buffer) noexcept;
+    bool Process(AudioBuffer& buffer) const noexcept;
     /** @summary Resets every effect in insertion order. */
     void Reset() noexcept;
     /** @summary Gets the number of effects currently in the chain. */

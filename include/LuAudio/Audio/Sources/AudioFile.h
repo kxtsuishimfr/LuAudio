@@ -9,7 +9,9 @@ namespace LuAudio::Audio {
  */
 enum class AudioFileType {
     /** @summary RIFF/WAVE audio file. */
-    Wav
+    Wav,
+    /** @summary MPEG Layer III audio file. */
+    Mp3
 };
 
 /**

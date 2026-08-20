@@ -74,7 +74,11 @@ public final class MainActivity extends Activity {
     }
 
     private void startPlayback() {
-        runCommand(MainActivity::nativeStartPlayback);
+        output.setText("Decoding MP3...");
+        new Thread(() -> {
+            final String result = nativeStartPlayback();
+            runOnUiThread(() -> output.setText(result));
+        }, "LuAudioPlaybackStart").start();
     }
 
     private void runCommand(java.util.function.Supplier<String> command) {

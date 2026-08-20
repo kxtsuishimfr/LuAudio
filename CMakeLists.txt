@@ -19,6 +19,7 @@ set(LUAUDIO_SOURCES
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Sources/AudioFile.cpp"
+    "src/Audio/Sources/Mp3FileReader.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
     "src/Utils/Diagnostics/Log.cpp"
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
@@ -28,8 +29,10 @@ set(LUAUDIO_SOURCES
     "include/LuAudio/Audio/Playback/AudioPlayer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
+    "include/LuAudio/Audio/Sources/Mp3FileReader.h"
     "include/LuAudio/Audio/Sources/WavFileReader.h"
     "include/LuAudio/Audio/Sources/IAudioReader.h"
+    "include/LuAudio/Audio/Contracts/IAudioDecoder.h"
     "include/LuAudio/Common.h"
     "include/LuAudio/LuAudio.h"
     "include/LuAudio/Utils/Diagnostics/Log.h"
@@ -37,8 +40,10 @@ set(LUAUDIO_SOURCES
 
 if (WIN32)
     list(APPEND LUAUDIO_SOURCES
+        "src/Providers/Windows/WAudioDecoder.cpp"
         "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
         "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
+        "include/LuAudio/Providers/Windows/WAudioDecoder.h"
         "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
         "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
     )
@@ -61,7 +66,7 @@ target_include_directories(LuAudio PUBLIC
 )
 
 if (WIN32)
-    target_link_libraries(LuAudio PRIVATE ole32 avrt)
+    target_link_libraries(LuAudio PRIVATE ole32 avrt mfplat mfreadwrite mfuuid)
 endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
@@ -72,14 +77,16 @@ if (ANDROID)
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Oboe" "${CMAKE_CURRENT_BINARY_DIR}/oboe-build")
 
     add_library(LuAudioOboe SHARED
+        "src/Providers/Android/AAudioDecoder.cpp"
         "src/Providers/Android/Oboe/OboeBackend.cpp"
+        "include/LuAudio/Providers/Android/AAudioDecoder.h"
         "include/LuAudio/Providers/Android/Oboe/OboeBackend.h"
     )
 
     target_include_directories(LuAudioOboe PRIVATE
         "${PROJECT_SOURCE_DIR}/third_party/Oboe/include"
     )
-    target_link_libraries(LuAudioOboe PRIVATE LuAudio oboe)
+    target_link_libraries(LuAudioOboe PRIVATE LuAudio oboe mediandk)
     target_compile_features(LuAudioOboe PRIVATE cxx_std_20)
 
     if (LUAUDIO_ANDROID_TESTS)

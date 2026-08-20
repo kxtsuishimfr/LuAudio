@@ -13,7 +13,7 @@
 namespace {
 
 const char* DefaultAudioPath =
-    R"(C:\Users\Katsu\source\repos\LuAudio\tests\Audios\sample_1.wav)";
+    R"(C:\Users\Katsu\source\repos\LuAudio\tests\Audios\sample_2.mp3)";
 
 void PrintPosition(const LuAudio::Audio::AudioPlayer& player, const char* action)
 {
@@ -61,8 +61,10 @@ int main(int argc, char* argv[])
     using namespace LuAudio;
 
     const std::string path = argc > 1 ? argv[1] : DefaultAudioPath;
-    auto reader = std::make_unique<Audio::WavFileReader>();
-    const auto fileResult = reader->Open(path);
+    auto reader = std::make_unique<Audio::Mp3FileReader>(
+        std::make_unique<Providers::Windows::WAudioDecoder>());
+    const auto fileResult = reader->Open(
+        Audio::AudioFile(path, Audio::AudioFileType::Mp3));
     if (!fileResult.Succeeded()) {
         std::cerr << "Audio file open failed: " << fileResult.Message() << '\n';
         return 1;

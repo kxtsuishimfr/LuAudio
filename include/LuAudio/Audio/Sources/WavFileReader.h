@@ -79,7 +79,7 @@ public:
      */
     std::uint64_t FramesRemaining() const noexcept override;
 
-    /** @summary Reports that resident WAV samples support absolute seeking. */
+    /** @summary Reports that resident samples support absolute seeking. */
     bool CanSeek() const noexcept override;
 
 private:

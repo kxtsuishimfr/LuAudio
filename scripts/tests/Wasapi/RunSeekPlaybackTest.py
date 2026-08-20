@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BUILD_DIR = PROJECT_ROOT / "out" / "build" / "wasapi-tests"
-DEFAULT_AUDIO_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_1.wav"
+DEFAULT_AUDIO_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_2.mp3"
 TARGET_NAME = "LuAudioWasapiSeekPlaybackTest"
 
 
@@ -19,7 +19,7 @@ def run(command: list[str], cwd: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build and run the interactive LuAudio WASAPI seek playback test."
+        description="Build and run the interactive LuAudio WASAPI MP3 seek playback test."
     )
     parser.add_argument("audio_file", nargs="?", type=Path, default=DEFAULT_AUDIO_FILE)
     parser.add_argument("--build-dir", type=Path, default=DEFAULT_BUILD_DIR)
@@ -30,7 +30,6 @@ def main() -> int:
     if not audio_file.is_file():
         print(f"Audio file was not found: {audio_file}", file=sys.stderr)
         return 1
-
     build_dir = args.build_dir.resolve()
     build_dir.parent.mkdir(parents=True, exist_ok=True)
 

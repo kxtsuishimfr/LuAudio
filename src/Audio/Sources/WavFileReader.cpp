@@ -186,8 +186,7 @@ Result WavFileReader::Read(AudioBuffer& destination)
     }
 
     const std::size_t framesToCopy = static_cast<std::size_t>(std::min<std::uint64_t>(
-        static_cast<std::uint64_t>(destination.FrameCount()),
-        FramesRemaining()));
+        static_cast<std::uint64_t>(destination.FrameCount()), FramesRemaining()));
     const std::size_t sampleCount = framesToCopy * format_.channelCount;
     std::copy_n(samples_.data() + readFrame_ * format_.channelCount, sampleCount, destination.Data());
     if (framesToCopy < destination.FrameCount()) {

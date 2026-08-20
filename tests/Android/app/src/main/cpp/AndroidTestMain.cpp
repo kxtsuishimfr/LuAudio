@@ -13,7 +13,7 @@
 namespace {
 
 constexpr const char* kLogTag = "LuAudioAndroidTests";
-constexpr const char* kAudioPath = "/sdcard/LuAudio_Tests/sample_1.wav";
+constexpr const char* kAudioPath = "/sdcard/LuAudio_Tests/sample_2.mp3";
 
 std::mutex sessionMutex;
 std::unique_ptr<LuAudio::Providers::Android::Oboe::OboeBackend> backend;
@@ -43,11 +43,12 @@ std::string StartPlaybackLocked()
         return "Playback is already running.\n\n" + StatusTextLocked();
     }
 
-    auto reader = std::make_unique<LuAudio::Audio::WavFileReader>();
+    auto reader = std::make_unique<LuAudio::Audio::Mp3FileReader>(
+        std::make_unique<LuAudio::Providers::Android::AAudioDecoder>());
     const auto fileResult = reader->Open(
-        LuAudio::Audio::AudioFile(kAudioPath, LuAudio::Audio::AudioFileType::Wav));
+        LuAudio::Audio::AudioFile(kAudioPath, LuAudio::Audio::AudioFileType::Mp3));
     if (!fileResult.Succeeded()) {
-        return "Open WAV: " + ResultText(fileResult);
+        return "Open MP3: " + ResultText(fileResult);
     }
 
     backend = std::make_unique<LuAudio::Providers::Android::Oboe::OboeBackend>();

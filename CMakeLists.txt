@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.10)
+﻿cmake_minimum_required(VERSION 3.20)
 
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -7,12 +7,16 @@ endif()
 
 project ("LuAudio")
 
+include(CTest)
+
 add_library(LuAudio SHARED
     "src/Audio/Contracts/AudioFormat.cpp"
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
     "src/Audio/Contracts/Result.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
+    "src/Audio/Sources/AudioFile.cpp"
+    "src/Audio/Sources/WavFileReader.cpp"
     "src/Utils/Diagnostics/Log.cpp"
     "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
     "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
@@ -21,7 +25,10 @@ add_library(LuAudio SHARED
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
     "include/LuAudio/Audio/Contracts/Result.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
+    "include/LuAudio/Audio/Sources/AudioFile.h"
+    "include/LuAudio/Audio/Sources/WavFileReader.h"
     "include/LuAudio/Common.h"
+    "include/LuAudio/LuAudio.h"
     "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
     "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
     "include/LuAudio/Utils/Diagnostics/Log.h"
@@ -47,4 +54,38 @@ endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
     set_property(TARGET LuAudio PROPERTY CXX_STANDARD 20)
+endif()
+
+if (BUILD_TESTING AND WIN32)
+    include(FetchContent)
+
+    FetchContent_Declare(
+        GoogleTest
+        URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(GoogleTest)
+
+    add_executable(LuAudioProviderTests
+        "tests/Windows/Wasapi/WasapiBackendTests.cpp"
+        "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
+    )
+    target_link_libraries(LuAudioProviderTests PRIVATE LuAudio GTest::gtest_main)
+    target_compile_features(LuAudioProviderTests PRIVATE cxx_std_20)
+
+    include(GoogleTest)
+    gtest_discover_tests(LuAudioProviderTests)
+
+    add_executable(LuAudioWasapiSilenceTest
+        "tests/Windows/Wasapi/WasapiSilenceTest.cpp"
+    )
+    target_link_libraries(LuAudioWasapiSilenceTest PRIVATE LuAudio)
+    target_compile_features(LuAudioWasapiSilenceTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioWasapiFilePlaybackTest
+        "tests/Windows/Wasapi/WasapiFilePlaybackTest.cpp"
+    )
+    target_link_libraries(LuAudioWasapiFilePlaybackTest PRIVATE LuAudio)
+    target_compile_features(LuAudioWasapiFilePlaybackTest PRIVATE cxx_std_20)
 endif()

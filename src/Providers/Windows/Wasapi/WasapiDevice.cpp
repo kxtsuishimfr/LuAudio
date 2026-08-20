@@ -38,7 +38,19 @@ bool IsFloat32(const WAVEFORMATEX& format)
 
     if (format.wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
         const auto& extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format);
-        return extensible.SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT && format.wBitsPerSample == 32;
+        const auto& subFormat = extensible.SubFormat;
+        return subFormat.Data1 == 0x00000003 &&
+            subFormat.Data2 == 0x0000 &&
+            subFormat.Data3 == 0x0010 &&
+            subFormat.Data4[0] == 0x80 &&
+            subFormat.Data4[1] == 0x00 &&
+            subFormat.Data4[2] == 0x00 &&
+            subFormat.Data4[3] == 0xaa &&
+            subFormat.Data4[4] == 0x00 &&
+            subFormat.Data4[5] == 0x38 &&
+            subFormat.Data4[6] == 0x9b &&
+            subFormat.Data4[7] == 0x71 &&
+            format.wBitsPerSample == 32;
     }
 
     return false;

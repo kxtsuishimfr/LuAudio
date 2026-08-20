@@ -125,6 +125,17 @@ endif()
 if (ANDROID)
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Oboe" "${CMAKE_CURRENT_BINARY_DIR}/oboe-build")
 
+    add_library(LuAudioHallReverbPlugin SHARED
+        "tests/Windows/Plugins/HallReverbPlugin.cpp"
+    )
+    target_include_directories(LuAudioHallReverbPlugin PRIVATE
+        "${PROJECT_SOURCE_DIR}/include"
+    )
+    target_compile_features(LuAudioHallReverbPlugin PRIVATE cxx_std_20)
+    set_target_properties(LuAudioHallReverbPlugin PROPERTIES
+        OUTPUT_NAME "ProfessionalHallReverb"
+    )
+
     add_library(LuAudioAndroidProvider SHARED
         "src/Providers/Android/AAudioDecoder.cpp"
         "src/Providers/Android/APluginProvider.cpp"
@@ -159,10 +170,13 @@ if (ANDROID)
         )
         target_link_libraries(native-lib PRIVATE
             LuAudioCore
+            LuAudioPluginHost
             LuAudioAndroidProvider
+            LuAudioHallReverbPlugin
             log
             android
         )
+        add_dependencies(native-lib LuAudioHallReverbPlugin)
         target_compile_features(native-lib PRIVATE cxx_std_20)
     endif()
 endif()

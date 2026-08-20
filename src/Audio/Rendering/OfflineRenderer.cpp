@@ -38,7 +38,7 @@ Result OfflineRenderer::Render(
         block.Resize(frameCount);
 
         const std::uint64_t positionBeforeRead = reader.Position();
-        const Result readResult = reader.Read(block);
+        const Result readResult = reader.ReadFully(block);
         if (!readResult.Succeeded()) {
             sink.Abort();
             return readResult;

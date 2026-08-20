@@ -68,6 +68,29 @@ def push_test_audio(serial: str | None) -> None:
         run(push_command)
 
 
+def grant_storage_access(serial: str | None) -> None:
+    for permission in (
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+    ):
+        command = ["adb"]
+        if serial:
+            command.extend(["-s", serial])
+        command.extend(["shell", "pm", "grant", PACKAGE_NAME, permission])
+        result = subprocess.run(command, cwd=ROOT_DIR)
+        if result.returncode != 0:
+            print(f"Permission not grantable on this Android version: {permission}")
+
+    appops_command = ["adb"]
+    if serial:
+        appops_command.extend(["-s", serial])
+    appops_command.extend(
+        ["shell", "appops", "set", PACKAGE_NAME, "MANAGE_EXTERNAL_STORAGE", "allow"]
+    )
+    run(appops_command)
+
+
 def find_device(requested_serial: str | None) -> str | None:
     result = subprocess.run(
         ["adb", "devices"],
@@ -110,6 +133,7 @@ def main() -> int:
             install_command.extend(["-s", serial])
         install_command.extend(["install", "-r", str(APK_PATH)])
         run(install_command)
+        grant_storage_access(serial)
         push_test_audio(serial)
 
         if not args.no_launch:

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <thread>
 
 #include <LuAudio/Audio/Contracts/AudioFormat.h>
 #include <LuAudio/Audio/Contracts/Result.h>
@@ -24,6 +27,46 @@ public:
      * @returns Operation result.
      */
     virtual Result Read(AudioBuffer& destination) = 0;
+
+    /**
+     * @summary Reads a complete offline block, waiting through temporary underflow.
+     * @param destination Buffer to fill.
+     * @returns Operation result.
+     */
+    Result ReadFully(AudioBuffer& destination)
+    {
+        const std::size_t requestedFrames = destination.FrameCount();
+        std::size_t framesRead = 0;
+        while (framesRead < requestedFrames && !EndOfFile()) {
+            AudioBuffer chunk(destination.Format(), requestedFrames - framesRead);
+            const std::uint64_t positionBefore = Position();
+            const Result result = Read(chunk);
+            if (!result.Succeeded()) {
+                return result;
+            }
+
+            const std::uint64_t advanced = Position() - positionBefore;
+            if (advanced > chunk.FrameCount()) {
+                return Result::Failure(
+                    ResultCode::ProcessingFailed,
+                    "Audio reader advanced beyond its requested block");
+            }
+            if (advanced == 0) {
+                if (!EndOfFile()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                continue;
+            }
+
+            const std::size_t samples = static_cast<std::size_t>(advanced) *
+                destination.Format().channelCount;
+            std::copy_n(chunk.Data(), samples,
+                destination.Data() + framesRead * destination.Format().channelCount);
+            framesRead += static_cast<std::size_t>(advanced);
+        }
+        destination.Resize(framesRead);
+        return Result::Success();
+    }
 
     /**
      * @summary Seeks to an absolute source frame.

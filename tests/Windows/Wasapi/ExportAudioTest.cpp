@@ -1,5 +1,6 @@
 #include <conio.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -33,22 +34,6 @@ Result OpenAudio(const std::filesystem::path& path, std::unique_ptr<IAudioReader
         reader = std::move(mp3Reader);
     }
     return result;
-}
-
-std::filesystem::path ChooseInputPath()
-{
-    std::cout << "Choose audio for this session:\n"
-              << "1: tests/Audios/sample_1.wav\n"
-              << "2: tests/Audios/sample_2.mp3\n";
-    while (true) {
-        const int key = _getch();
-        if (key == '1') {
-            return "tests/Audios/sample_1.wav";
-        }
-        if (key == '2') {
-            return "tests/Audios/sample_2.mp3";
-        }
-    }
 }
 
 Result CreateHallChain(
@@ -87,15 +72,102 @@ void PrintResult(const char* operation, const Result& result)
     }
 }
 
+class CombinedReader final : public IAudioReader {
+public:
+    CombinedReader(std::unique_ptr<IAudioReader> first,
+        std::unique_ptr<IAudioReader> second,
+        std::shared_ptr<const AudioEffectChain> firstEffects,
+        std::shared_ptr<const AudioEffectChain> secondEffects)
+        : first_(std::move(first)), second_(std::move(second)),
+          firstEffects_(std::move(firstEffects)), secondEffects_(std::move(secondEffects)),
+          format_(first_->Format()), frameCount_(std::max(first_->FrameCount(), second_->FrameCount()))
+    {
+    }
+
+    Result Read(AudioBuffer& destination) override
+    {
+        destination.Clear();
+        const auto readOne = [&](IAudioReader& reader,
+            const std::shared_ptr<const AudioEffectChain>& effects) -> Result {
+            if (reader.EndOfFile()) {
+                return Result::Success();
+            }
+
+            AudioBuffer source(format_, destination.FrameCount());
+            const auto before = reader.Position();
+            const auto result = reader.Read(source);
+            if (!result.Succeeded()) {
+                return result;
+            }
+            const auto frames = static_cast<std::size_t>(reader.Position() - before);
+            if (frames > destination.FrameCount()) {
+                return Result::Failure(ResultCode::ProcessingFailed,
+                    "Audio reader advanced beyond its requested block");
+            }
+            source.Resize(frames);
+            if (effects && !effects->Process(source)) {
+                return Result::Failure(ResultCode::ProcessingFailed,
+                    "Offline source effect processing failed");
+            }
+            for (std::size_t index = 0; index < source.SampleCount(); ++index) {
+                destination.Data()[index] += source.Data()[index];
+            }
+            return Result::Success();
+        };
+
+        const auto firstResult = readOne(*first_, firstEffects_);
+        if (!firstResult.Succeeded()) {
+            return firstResult;
+        }
+        const auto secondResult = readOne(*second_, secondEffects_);
+        if (!secondResult.Succeeded()) {
+            return secondResult;
+        }
+        position_ += destination.FrameCount();
+        return Result::Success();
+    }
+
+    Result Seek(std::uint64_t frame) override
+    {
+        const auto firstResult = first_->Seek(frame);
+        const auto secondResult = second_->Seek(frame);
+        position_ = frame;
+        return firstResult.Succeeded() ? secondResult : firstResult;
+    }
+    Result Rewind() override { return Seek(0); }
+    std::uint64_t Position() const noexcept override { return position_; }
+    bool EndOfFile() const noexcept override { return position_ >= frameCount_; }
+    bool IsOpen() const noexcept override { return first_->IsOpen() && second_->IsOpen(); }
+    const AudioFormat& Format() const noexcept override { return format_; }
+    std::uint64_t FrameCount() const noexcept override { return frameCount_; }
+    std::uint64_t FramesRemaining() const noexcept override
+    {
+        return position_ < frameCount_ ? frameCount_ - position_ : 0;
+    }
+    bool CanSeek() const noexcept override { return first_->CanSeek() && second_->CanSeek(); }
+
+private:
+    std::unique_ptr<IAudioReader> first_;
+    std::unique_ptr<IAudioReader> second_;
+    std::shared_ptr<const AudioEffectChain> firstEffects_;
+    std::shared_ptr<const AudioEffectChain> secondEffects_;
+    AudioFormat format_;
+    std::uint64_t frameCount_;
+    std::uint64_t position_ = 0;
+};
+
 }
 
 int main(int argc, char* argv[])
 {
-    const auto inputPath = argc > 1
+    const auto wavPath = argc > 1
         ? std::filesystem::path(argv[1])
-        : ChooseInputPath();
-    const auto outputDirectory = argc > 2
+        : std::filesystem::path("tests/Audios/sample_1.wav");
+    const auto mp3Path = argc > 2
         ? std::filesystem::path(argv[2])
+        : std::filesystem::path("tests/Audios/sample_2.mp3");
+    const auto outputDirectory = argc > 3
+        ? std::filesystem::path(argv[3])
         : std::filesystem::path("tests/Audios/Output");
 #if defined(LUAUDIO_HALL_REVERB_PLUGIN_PATH)
     const std::filesystem::path pluginPath = LUAUDIO_HALL_REVERB_PLUGIN_PATH;
@@ -104,39 +176,62 @@ int main(int argc, char* argv[])
     return 1;
 #endif
 
-    std::unique_ptr<IAudioReader> previewReader;
-    const auto previewOpen = OpenAudio(inputPath, previewReader);
-    if (!previewOpen.Succeeded()) {
-        PrintResult("Preview audio open", previewOpen);
+    std::unique_ptr<IAudioReader> wavReader;
+    std::unique_ptr<IAudioReader> mp3Reader;
+    const auto wavOpen = OpenAudio(wavPath, wavReader);
+    const auto mp3Open = OpenAudio(mp3Path, mp3Reader);
+    if (!wavOpen.Succeeded() || !mp3Open.Succeeded()) {
+        PrintResult("WAV open", wavOpen);
+        PrintResult("MP3 open", mp3Open);
         return 1;
     }
-    const AudioFormat previewFormat = previewReader->Format();
+    if (wavReader->Format().sampleRate != mp3Reader->Format().sampleRate ||
+        wavReader->Format().channelCount != mp3Reader->Format().channelCount) {
+        std::cerr << "The WAV and MP3 sources must have matching formats\n";
+        return 1;
+    }
+    const auto sampleRate = wavReader->Format().sampleRate;
 
-    AudioEffectChain previewEffects;
-    const auto previewEffectResult = CreateHallChain(pluginPath, previewReader->Format(), previewEffects);
-    if (!previewEffectResult.Succeeded()) {
-        PrintResult("Preview effect setup", previewEffectResult);
+    auto wavEffects = std::make_shared<AudioEffectChain>();
+    auto mp3Effects = std::make_shared<AudioEffectChain>();
+    const auto wavEffectResult = CreateHallChain(pluginPath, wavReader->Format(), *wavEffects);
+    const auto mp3EffectResult = CreateHallChain(pluginPath, mp3Reader->Format(), *mp3Effects);
+    if (!wavEffectResult.Succeeded() || !mp3EffectResult.Succeeded()) {
+        PrintResult("WAV effect setup", wavEffectResult);
+        PrintResult("MP3 effect setup", mp3EffectResult);
         return 1;
     }
 
     Providers::Windows::Wasapi::WasapiBackend backend;
-    AudioPlayer player(backend);
-    const auto playerOpen = player.Open(
-        std::move(previewReader), AudioStreamConfig{previewFormat, 512, false});
-    if (!playerOpen.Succeeded()) {
-        PrintResult("WASAPI player open", playerOpen);
+    AudioMixer mixer(backend, 2);
+    const auto mixerOpen = mixer.Open(AudioStreamConfig{wavReader->Format(), 512, false});
+    if (!mixerOpen.Succeeded()) {
+        PrintResult("WASAPI mixer open", mixerOpen);
         return 1;
     }
-    player.SetEffectChain(&previewEffects);
-    const auto startResult = player.Start();
+    AudioMixer::SourceId wavId = 0;
+    AudioMixer::SourceId mp3Id = 0;
+    const auto addWavResult = mixer.AddSource(std::move(wavReader), wavId);
+    const auto addMp3Result = mixer.AddSource(std::move(mp3Reader), mp3Id);
+    if (!addWavResult.Succeeded() || !addMp3Result.Succeeded()) {
+        PrintResult("WAV source add", addWavResult);
+        PrintResult("MP3 source add", addMp3Result);
+        mixer.Close();
+        return 1;
+    }
+    bool wavReverb = true;
+    bool mp3Reverb = true;
+    mixer.SetSourceEffects(wavId, wavEffects);
+    mixer.SetSourceEffects(mp3Id, mp3Effects);
+    const auto startResult = mixer.Start();
     if (!startResult.Succeeded()) {
-        PrintResult("WASAPI start", startResult);
-        player.Close();
+        PrintResult("WASAPI mixer start", startResult);
+        mixer.Close();
         return 1;
     }
 
     std::filesystem::create_directories(outputDirectory);
-    const auto outputPath = outputDirectory / (inputPath.stem().string() + "_hall_reverb.wav");
+    const auto outputPath = outputDirectory / "sample_1_plus_sample_2_hall_reverb.wav";
     std::atomic<bool> exportRunning = false;
     std::thread exportThread;
 
@@ -148,12 +243,19 @@ int main(int argc, char* argv[])
         }
     };
 
-    std::cout << "Playing " << inputPath << " through WASAPI with ProfessionalHallReverb.\n"
-              << "Space: export to " << outputPath << "\n"
-              << "P: pause/resume preview, Q: quit\n";
+    std::cout << "Playing " << wavPath << " and " << mp3Path
+              << " through WASAPI with ProfessionalHallReverb.\n"
+              << "Space: offline export to " << outputPath << "\n"
+              << "R: pause/resume both sources\n"
+              << "Left/Right: seek both sources by 5 seconds\n"
+              << "O: toggle reverb for sample_1.wav\n"
+              << "P: toggle reverb for sample_2.mp3\n"
+              << "Q: quit\n";
 
     bool quit = false;
-    while (!quit && !player.EndOfFile()) {
+    bool paused = false;
+    while (!quit && mixer.ActiveSourceCount() != 0 &&
+        !(mixer.IsSourceFinished(wavId) && mixer.IsSourceFinished(mp3Id))) {
         if (!_kbhit()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(25));
             continue;
@@ -161,29 +263,68 @@ int main(int argc, char* argv[])
         const int key = _getch();
         if (key == 'q' || key == 'Q') {
             quit = true;
+        } else if (key == 'r' || key == 'R') {
+            paused = !paused;
+            PrintResult(paused ? "Pause both sources" : "Resume both sources",
+                mixer.SetSourcePaused(wavId, paused));
+            PrintResult(paused ? "Pause MP3 source" : "Resume MP3 source",
+                mixer.SetSourcePaused(mp3Id, paused));
+        } else if (key == 'o' || key == 'O') {
+            wavReverb = !wavReverb;
+            PrintResult(wavReverb ? "Enable WAV reverb" : "Disable WAV reverb",
+                mixer.SetSourceEffects(wavId, wavReverb ? wavEffects : nullptr));
         } else if (key == 'p' || key == 'P') {
-            const auto result = player.IsPaused() ? player.Resume() : player.Pause();
-            PrintResult(player.IsPaused() ? "Resume" : "Pause", result);
+            mp3Reverb = !mp3Reverb;
+            PrintResult(mp3Reverb ? "Enable MP3 reverb" : "Disable MP3 reverb",
+                mixer.SetSourceEffects(mp3Id, mp3Reverb ? mp3Effects : nullptr));
+        } else if (key == 0 || key == 0xE0) {
+            const int arrow = _getch();
+            if (arrow == 75 || arrow == 77) {
+                const auto seconds = static_cast<std::int64_t>(sampleRate) * 5;
+                const auto seek = arrow == 75 ? -seconds : seconds;
+                PrintResult("Seek WAV", mixer.SeekSourceRelative(wavId, seek));
+                PrintResult("Seek MP3", mixer.SeekSourceRelative(mp3Id, seek));
+            }
         } else if (key == ' ' && !exportRunning.exchange(true)) {
             joinExport();
-            exportThread = std::thread([&, outputPath] {
-                std::unique_ptr<IAudioReader> exportReader;
-                const auto readerResult = OpenAudio(inputPath, exportReader);
-                if (!readerResult.Succeeded()) {
-                    PrintResult("Export audio open", readerResult);
+            exportThread = std::thread([&, outputPath, wavReverb, mp3Reverb] {
+                std::unique_ptr<IAudioReader> exportWav;
+                std::unique_ptr<IAudioReader> exportMp3;
+                const auto exportWavResult = OpenAudio(wavPath, exportWav);
+                const auto exportMp3Result = OpenAudio(mp3Path, exportMp3);
+                if (!exportWavResult.Succeeded() || !exportMp3Result.Succeeded()) {
+                    PrintResult("Export WAV open", exportWavResult);
+                    PrintResult("Export MP3 open", exportMp3Result);
                     exportRunning = false;
                     return;
                 }
-                AudioEffectChain exportEffects;
-                const auto effectResult = CreateHallChain(pluginPath, exportReader->Format(), exportEffects);
-                if (!effectResult.Succeeded()) {
-                    PrintResult("Export effect setup", effectResult);
-                    exportRunning = false;
-                    return;
+                std::shared_ptr<AudioEffectChain> exportWavEffects;
+                std::shared_ptr<AudioEffectChain> exportMp3Effects;
+                if (wavReverb) {
+                    exportWavEffects = std::make_shared<AudioEffectChain>();
+                    const auto result = CreateHallChain(
+                        pluginPath, exportWav->Format(), *exportWavEffects);
+                    if (!result.Succeeded()) {
+                        PrintResult("Export WAV effect setup", result);
+                        exportRunning = false;
+                        return;
+                    }
                 }
+                if (mp3Reverb) {
+                    exportMp3Effects = std::make_shared<AudioEffectChain>();
+                    const auto result = CreateHallChain(
+                        pluginPath, exportMp3->Format(), *exportMp3Effects);
+                    if (!result.Succeeded()) {
+                        PrintResult("Export MP3 effect setup", result);
+                        exportRunning = false;
+                        return;
+                    }
+                }
+                CombinedReader exportReader(std::move(exportWav), std::move(exportMp3),
+                    exportWavEffects, exportMp3Effects);
                 WavFileWriter writer(outputPath.string());
                 const auto renderResult = OfflineRenderer::Render(
-                    *exportReader, writer, &exportEffects, 4096);
+                    exportReader, writer, nullptr, 4096);
                 PrintResult("Offline export", renderResult);
                 if (renderResult.Succeeded()) {
                     std::cout << "Export finished: " << outputPath << '\n';
@@ -194,6 +335,11 @@ int main(int argc, char* argv[])
     }
 
     joinExport();
-    player.Close();
+    const auto stopResult = mixer.Stop();
+    mixer.Close();
+    if (!stopResult.Succeeded()) {
+        PrintResult("WASAPI mixer stop", stopResult);
+        return 1;
+    }
     return 0;
 }

@@ -1,4 +1,4 @@
-#include <LuAudio/LuAudio.h>
+#include <LuAudio/Plugins/PluginAbi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -197,7 +197,13 @@ const LuAudio::Plugins::PluginDescriptor Descriptor{
 
 }
 
-extern "C" __declspec(dllexport)
+#if defined(_WIN32)
+#define LUAUDIO_PLUGIN_EXPORT __declspec(dllexport)
+#else
+#define LUAUDIO_PLUGIN_EXPORT __attribute__((visibility("default")))
+#endif
+
+extern "C" LUAUDIO_PLUGIN_EXPORT
 const LuAudio::Plugins::PluginDescriptor* LuAudio_GetPluginDescriptor()
 {
     return &Descriptor;

@@ -6,8 +6,11 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.io.File;
@@ -20,10 +23,30 @@ public final class MainActivity extends Activity {
     }
 
     private TextView output;
+    private final Handler statusHandler = new Handler(Looper.getMainLooper());
+    private boolean exportPaused;
+    private Button pauseButton;
+    private Button playButton;
+    private Button wavReverbButton;
+    private Button mp3ReverbButton;
+    private boolean wavReverb = true;
+    private boolean mp3Reverb = true;
+    private final Runnable exportStatusPoll = new Runnable() {
+        @Override
+        public void run() {
+            String status = nativeGetExportStatus();
+            output.setText(status);
+            if (status.equals("Export started") || status.startsWith("Exporting")) {
+                statusHandler.postDelayed(this, 500);
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        ScrollView scroll = new ScrollView(this);
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.VERTICAL);
         controls.setPadding(32, 32, 32, 32);
@@ -31,41 +54,80 @@ public final class MainActivity extends Activity {
         output = new TextView(this);
         output.setTextSize(16.0f);
         output.setText("Android playback is ready.");
-        controls.addView(output, new LinearLayout.LayoutParams(-1, 0, 1.0f));
+        controls.addView(output, new LinearLayout.LayoutParams(-1, -2));
 
         File testDirectory = new File(Environment.getExternalStorageDirectory(), "LuAudio_Tests");
+        File outputDirectory = new File(Environment.getExternalStorageDirectory(), "LuAudio_Tests/Output");
+        String pluginPath = "libProfessionalHallReverb.so";
         addButton(controls, "Request audio permission", this::requestAudioPermission);
-        addButton(controls, "Start WAV + MP3 mixer", () -> runCommand(
-            () -> nativeRunAudioMixerPlaybackTest(testDirectory.getAbsolutePath())));
-        addButton(controls, "Stop mixer", () -> runCommand(MainActivity::nativeStopAudioMixer));
-        addButton(controls, "Pause/resume WAV", () -> {
-            wavPaused = !wavPaused;
-            runCommand(() -> nativeSetWavPaused(wavPaused));
+        wavReverbButton = addButton(controls, "WAV reverb: ON", () -> {
+            wavReverb = !wavReverb;
+            final boolean enabled = wavReverb;
+            runCommand(() -> {
+                String result = nativeSetWavReverb(enabled);
+                if (!result.startsWith("PASS:")) wavReverb = !enabled;
+                return result;
+            });
+            wavReverbButton.setText("WAV reverb: " + (wavReverb ? "ON" : "OFF"));
         });
-        addButton(controls, "Pause/resume MP3", () -> {
-            mp3Paused = !mp3Paused;
-            runCommand(() -> nativeSetMp3Paused(mp3Paused));
+        mp3ReverbButton = addButton(controls, "MP3 reverb: ON", () -> {
+            mp3Reverb = !mp3Reverb;
+            final boolean enabled = mp3Reverb;
+            runCommand(() -> {
+                String result = nativeSetMp3Reverb(enabled);
+                if (!result.startsWith("PASS:")) mp3Reverb = !enabled;
+                return result;
+            });
+            mp3ReverbButton.setText("MP3 reverb: " + (mp3Reverb ? "ON" : "OFF"));
         });
-        addButton(controls, "WAV seek -5s", () -> runCommand(() -> nativeSeekWav(false)));
-        addButton(controls, "WAV seek +5s", () -> runCommand(() -> nativeSeekWav(true)));
-        addButton(controls, "MP3 seek -5s", () -> runCommand(() -> nativeSeekMp3(false)));
-        addButton(controls, "MP3 seek +5s", () -> runCommand(() -> nativeSeekMp3(true)));
-        addButton(controls, "Stop WAV source", () -> runCommand(MainActivity::nativeStopWav));
-        addButton(controls, "Stop MP3 source", () -> runCommand(MainActivity::nativeStopMp3));
-        setContentView(controls);
+        playButton = addButton(controls, "Play audio", () -> runCommand(() -> {
+            String result = nativeStartPlayback(
+                testDirectory.getAbsolutePath(), pluginPath, wavReverb, mp3Reverb);
+            if (result.startsWith("PASS:")) {
+                runOnUiThread(() -> {
+                    pauseButton.setEnabled(true);
+                    playButton.setEnabled(false);
+                });
+            }
+            return result;
+        }));
+        pauseButton = addButton(controls, "Pause audio", () -> {
+            exportPaused = !exportPaused;
+            pauseButton.setText(exportPaused ? "Resume audio" : "Pause audio");
+            runCommand(() -> nativeSetPlaybackPaused(exportPaused));
+        });
+        pauseButton.setEnabled(false);
+        addButton(controls, "Export both samples", () -> {
+            outputDirectory.mkdirs();
+            runCommand(() -> {
+                String result = nativeStartOfflineExport(
+                    new File(outputDirectory, "sample_1_plus_sample_2_hall_reverb.wav").getAbsolutePath());
+                statusHandler.post(exportStatusPoll);
+                return result;
+            });
+        });
+        addButton(controls, "Stop audio", () -> runCommand(() -> {
+            String result = nativeStopPlayback();
+            runOnUiThread(() -> {
+                pauseButton.setEnabled(false);
+                pauseButton.setText("Pause audio");
+                exportPaused = false;
+                playButton.setEnabled(true);
+            });
+            return result;
+        }));
+        scroll.addView(controls);
+        setContentView(scroll);
     }
 
-    private static native String nativeRunAudioMixerPlaybackTest(String directory);
-    private static native String nativeStopAudioMixer();
-    private static native String nativeSetWavPaused(boolean paused);
-    private static native String nativeSetMp3Paused(boolean paused);
-    private static native String nativeSeekWav(boolean forward);
-    private static native String nativeSeekMp3(boolean forward);
-    private static native String nativeStopWav();
-    private static native String nativeStopMp3();
-
-    private boolean wavPaused;
-    private boolean mp3Paused;
+    private static native String nativeStartPlayback(String directory, String pluginPath,
+        boolean wavReverb, boolean mp3Reverb);
+    private static native String nativeSetPlaybackPaused(boolean paused);
+    private static native String nativeSetWavReverb(boolean enabled);
+    private static native String nativeSetMp3Reverb(boolean enabled);
+    private static native String nativeStartOfflineExport(String outputPath);
+    private static native String nativeStopPlayback();
+    private static native String nativeGetExportStatus();
 
     private void requestAudioPermission() {
         String permission = Build.VERSION.SDK_INT >= 33
@@ -97,10 +159,11 @@ public final class MainActivity extends Activity {
         }, "LuAudioAndroidCommand").start();
     }
 
-    private void addButton(LinearLayout parent, String label, Runnable command) {
+    private Button addButton(LinearLayout parent, String label, Runnable command) {
         Button button = new Button(this);
         button.setText(label);
         button.setOnClickListener(view -> command.run());
         parent.addView(button, new LinearLayout.LayoutParams(-1, -2));
+        return button;
     }
 }

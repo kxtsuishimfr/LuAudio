@@ -10,6 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BUILD_DIR = PROJECT_ROOT / "out" / "build" / "wasapi-tests"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "tests" / "Audios" / "Output"
 TARGET_NAME = "LuAudioExportAudioTest"
+DEFAULT_WAV_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_1.wav"
+DEFAULT_MP3_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_2.mp3"
 
 
 def run(command: list[str], cwd: Path) -> None:
@@ -22,10 +24,18 @@ def main() -> int:
         description="Build and run the interactive LuAudio WASAPI export test."
     )
     parser.add_argument(
-        "audio_file",
+        "wav_file",
         nargs="?",
         type=Path,
-        help="Optional audio file. Omit it to choose sample 1 or 2 in the test.",
+        default=DEFAULT_WAV_FILE,
+        help="WAV input file (default: sample_1.wav).",
+    )
+    parser.add_argument(
+        "mp3_file",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_MP3_FILE,
+        help="MP3 input file (default: sample_2.mp3).",
     )
     parser.add_argument("output_dir", nargs="?", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--build-dir", type=Path, default=DEFAULT_BUILD_DIR)
@@ -33,10 +43,12 @@ def main() -> int:
     parser.add_argument("--build-only", action="store_true")
     args = parser.parse_args()
 
-    audio_file = args.audio_file.resolve() if args.audio_file is not None else None
-    if audio_file is not None and not audio_file.is_file():
-        print(f"Audio file was not found: {audio_file}", file=sys.stderr)
-        return 1
+    wav_file = args.wav_file.resolve()
+    mp3_file = args.mp3_file.resolve()
+    for audio_file in (wav_file, mp3_file):
+        if not audio_file.is_file():
+            print(f"Audio file was not found: {audio_file}", file=sys.stderr)
+            return 1
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -72,8 +84,7 @@ def main() -> int:
         return 1
 
     command = [str(executable)]
-    if audio_file is not None:
-        command.extend([str(audio_file), str(output_dir)])
+    command.extend([str(wav_file), str(mp3_file), str(output_dir)])
     run(command, PROJECT_ROOT)
     return 0
 

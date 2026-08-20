@@ -16,6 +16,7 @@ public:
     float* Data() noexcept;
     const float* Data() const noexcept;
     std::size_t SampleCount() const noexcept;
+    void Resize(std::size_t frameCount) noexcept;
     void Clear() noexcept;
 
 private:

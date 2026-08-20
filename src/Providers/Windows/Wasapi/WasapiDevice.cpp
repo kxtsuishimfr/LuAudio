@@ -277,6 +277,7 @@ private:
             return;
         }
 
+        renderBuffer_.Resize(framesToRender);
         renderBuffer_.Clear();
         if (callback_) {
             callback_(renderBuffer_);

@@ -38,6 +38,11 @@ std::size_t AudioBuffer::SampleCount() const noexcept
     return samples_.size();
 }
 
+void AudioBuffer::Resize(std::size_t frameCount) noexcept
+{
+    samples_.resize(frameCount * format_.channelCount, 0.0F);
+}
+
 void AudioBuffer::Clear() noexcept
 {
     std::fill(samples_.begin(), samples_.end(), 0.0F);

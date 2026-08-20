@@ -8,6 +8,7 @@ namespace LuAudio::Audio {
  * @summary Identifies a supported audio file format.
  */
 enum class AudioFileType {
+    /** @summary RIFF/WAVE audio file. */
     Wav
 };
 

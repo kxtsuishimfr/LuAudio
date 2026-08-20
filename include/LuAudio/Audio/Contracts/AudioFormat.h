@@ -8,6 +8,7 @@ namespace LuAudio::Audio {
  * @summary Describes the sample data type.
  */
 enum class SampleType {
+    /** @summary 32-bit floating-point samples. */
     Float32
 };
 
@@ -15,6 +16,7 @@ enum class SampleType {
  * @summary Describes how channel samples are stored.
  */
 enum class ChannelLayout {
+    /** @summary Channel samples are stored consecutively per frame. */
     Interleaved
 };
 

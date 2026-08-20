@@ -16,6 +16,7 @@ set(LUAUDIO_SOURCES
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
     "src/Audio/Contracts/Result.cpp"
+    "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
@@ -24,9 +25,11 @@ set(LUAUDIO_SOURCES
     "include/LuAudio/Audio/Contracts/AudioStreamConfig.h"
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
     "include/LuAudio/Audio/Contracts/Result.h"
+    "include/LuAudio/Audio/Playback/AudioPlayer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/WavFileReader.h"
+    "include/LuAudio/Audio/Sources/IAudioReader.h"
     "include/LuAudio/Common.h"
     "include/LuAudio/LuAudio.h"
     "include/LuAudio/Utils/Diagnostics/Log.h"
@@ -123,4 +126,10 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioWasapiFilePlaybackTest PRIVATE LuAudio)
     target_compile_features(LuAudioWasapiFilePlaybackTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioWasapiSeekPlaybackTest
+        "tests/Windows/Wasapi/WasapiSeekPlaybackTest.cpp"
+    )
+    target_link_libraries(LuAudioWasapiSeekPlaybackTest PRIVATE LuAudio)
+    target_compile_features(LuAudioWasapiSeekPlaybackTest PRIVATE cxx_std_20)
 endif()

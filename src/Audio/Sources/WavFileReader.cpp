@@ -34,6 +34,10 @@ Result InvalidFile(const char* message)
 
 Result WavFileReader::Open(const AudioFile& file)
 {
+    open_ = false;
+    samples_.clear();
+    readFrame_ = 0;
+
     if (!file.IsValid()) {
         return Result::Failure(ResultCode::InvalidArgument, "Audio file path is empty");
     }
@@ -46,6 +50,10 @@ Result WavFileReader::Open(const AudioFile& file)
 
 Result WavFileReader::Open(const std::string& path)
 {
+    open_ = false;
+    samples_.clear();
+    readFrame_ = 0;
+
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
         return Result::Failure(ResultCode::InvalidArgument, "Unable to open WAV file");
@@ -177,7 +185,9 @@ Result WavFileReader::Read(AudioBuffer& destination)
         return Result::Failure(ResultCode::InvalidArgument, "Audio buffer format does not match WAV format");
     }
 
-    const std::size_t framesToCopy = std::min(destination.FrameCount(), FramesRemaining());
+    const std::size_t framesToCopy = static_cast<std::size_t>(std::min<std::uint64_t>(
+        static_cast<std::uint64_t>(destination.FrameCount()),
+        FramesRemaining()));
     const std::size_t sampleCount = framesToCopy * format_.channelCount;
     std::copy_n(samples_.data() + readFrame_ * format_.channelCount, sampleCount, destination.Data());
     if (framesToCopy < destination.FrameCount()) {
@@ -189,10 +199,18 @@ Result WavFileReader::Read(AudioBuffer& destination)
 
 Result WavFileReader::Rewind()
 {
+    return Seek(0);
+}
+
+Result WavFileReader::Seek(std::uint64_t frame)
+{
     if (!open_) {
         return Result::Failure(ResultCode::InvalidState, "WAV file is not open");
     }
-    readFrame_ = 0;
+    if (frame > FrameCount()) {
+        return Result::Failure(ResultCode::InvalidArgument, "WAV seek position is outside the file");
+    }
+    readFrame_ = static_cast<std::size_t>(frame);
     return Result::Success();
 }
 
@@ -211,17 +229,27 @@ const AudioFormat& WavFileReader::Format() const noexcept
     return format_;
 }
 
-std::size_t WavFileReader::FrameCount() const noexcept
+std::uint64_t WavFileReader::FrameCount() const noexcept
 {
     if (format_.channelCount == 0) {
         return 0;
     }
-    return samples_.size() / format_.channelCount;
+    return static_cast<std::uint64_t>(samples_.size() / format_.channelCount);
 }
 
-std::size_t WavFileReader::FramesRemaining() const noexcept
+std::uint64_t WavFileReader::FramesRemaining() const noexcept
 {
     return readFrame_ < FrameCount() ? FrameCount() - readFrame_ : 0;
+}
+
+std::uint64_t WavFileReader::Position() const noexcept
+{
+    return static_cast<std::uint64_t>(readFrame_);
+}
+
+bool WavFileReader::CanSeek() const noexcept
+{
+    return open_;
 }
 
 }

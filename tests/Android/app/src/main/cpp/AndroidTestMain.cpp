@@ -1,9 +1,9 @@
 #if defined(__ANDROID__)
-#include <atomic>
-#include <chrono>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <sstream>
-#include <thread>
+#include <string>
 
 #include <android/log.h>
 #include <jni.h>
@@ -15,104 +15,158 @@ namespace {
 constexpr const char* kLogTag = "LuAudioAndroidTests";
 constexpr const char* kAudioPath = "/sdcard/LuAudio_Tests/sample_1.wav";
 
-void AppendResult(std::ostringstream& output, const char* name, const LuAudio::Audio::Result& result)
+std::mutex sessionMutex;
+std::unique_ptr<LuAudio::Providers::Android::Oboe::OboeBackend> backend;
+std::unique_ptr<LuAudio::Audio::AudioPlayer> player;
+
+std::string ResultText(const LuAudio::Audio::Result& result)
 {
-    output << name << ": " << (result.Succeeded() ? "PASS" : "FAIL");
-    if (!result.Succeeded()) {
-        output << " (" << result.Message() << ")";
+    return result.Succeeded() ? "PASS" : "FAIL: " + result.Message();
+}
+
+std::string StatusTextLocked()
+{
+    if (!player) {
+        return "Player is not open.";
     }
-    output << '\n';
+
+    std::ostringstream output;
+    output << "Position: " << player->Position() << " / " << player->FrameCount()
+           << "\nRequested: " << player->RequestedPosition()
+           << "\nEnd of file: " << (player->EndOfFile() ? "yes" : "no");
+    return output.str();
+}
+
+std::string StartPlaybackLocked()
+{
+    if (player) {
+        return "Playback is already running.\n\n" + StatusTextLocked();
+    }
+
+    auto reader = std::make_unique<LuAudio::Audio::WavFileReader>();
+    const auto fileResult = reader->Open(
+        LuAudio::Audio::AudioFile(kAudioPath, LuAudio::Audio::AudioFileType::Wav));
+    if (!fileResult.Succeeded()) {
+        return "Open WAV: " + ResultText(fileResult);
+    }
+
+    backend = std::make_unique<LuAudio::Providers::Android::Oboe::OboeBackend>();
+    player = std::make_unique<LuAudio::Audio::AudioPlayer>(*backend);
+
+    LuAudio::Audio::AudioStreamConfig config;
+    config.format = reader->Format();
+    const auto openResult = player->Open(std::move(reader), config);
+    if (!openResult.Succeeded()) {
+        player.reset();
+        backend.reset();
+        return "Open player: " + ResultText(openResult);
+    }
+
+    const auto startResult = player->Start();
+    if (!startResult.Succeeded()) {
+        player->Close();
+        player.reset();
+        backend.reset();
+        return "Start playback: " + ResultText(startResult);
+    }
+
+    return "Playback started.\n\n" + StatusTextLocked();
+}
+
+std::string SeekLocked(std::uint64_t frame, const char* action)
+{
+    if (!player) {
+        return "Player is not open.";
+    }
+
+    const auto result = player->Seek(frame);
+    if (!result.Succeeded()) {
+        return std::string(action) + ": " + ResultText(result);
+    }
+    return std::string(action) + ".\n\n" + StatusTextLocked();
 }
 
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_luaudio_androidtests_MainActivity_runPlaybackTest(JNIEnv* environment, jclass)
+Java_com_luaudio_androidtests_MainActivity_nativeStartPlayback(JNIEnv* environment, jclass)
 {
-    using LuAudio::Audio::AudioFile;
-    using LuAudio::Audio::AudioFileType;
-    using LuAudio::Audio::AudioStreamConfig;
-    using LuAudio::Audio::WavFileReader;
-    using LuAudio::Providers::Android::Oboe::OboeBackend;
-
-    std::ostringstream output;
-    output << "LuAudio Android playback test\n\n";
-
-    WavFileReader reader;
-    const auto fileResult = reader.Open(AudioFile(kAudioPath, AudioFileType::Wav));
-    AppendResult(output, "Open WAV", fileResult);
-    if (!fileResult.Succeeded()) {
-        const auto text = output.str();
-        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s", text.c_str());
-        return environment->NewStringUTF(text.c_str());
-    }
-
-    output << "File sample rate: " << reader.Format().sampleRate << '\n';
-    output << "File channels: " << reader.Format().channelCount << '\n';
-    output << "File frames: " << reader.FrameCount() << "\n\n";
-
-    OboeBackend backend;
-    AudioStreamConfig config;
-    config.format = reader.Format();
-    std::atomic<std::size_t> renderedFrames = 0;
-    std::atomic<bool> reachedEnd = false;
-
-    const auto openResult = backend.Open(config);
-    AppendResult(output, "Open Oboe", openResult);
-    if (!openResult.Succeeded()) {
-        const auto text = output.str();
-        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s", text.c_str());
-        return environment->NewStringUTF(text.c_str());
-    }
-
-    if (backend.ActualConfig().format.sampleRate != reader.Format().sampleRate ||
-        backend.ActualConfig().format.channelCount != reader.Format().channelCount) {
-        output << "FAIL: Oboe format does not match WAV format\n";
-        backend.Close();
-        const auto text = output.str();
-        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "%s", text.c_str());
-        return environment->NewStringUTF(text.c_str());
-    }
-
-    backend.SetCallback([&reader, &renderedFrames, &reachedEnd](LuAudio::Audio::AudioBuffer& buffer) {
-        if (reader.EndOfFile()) {
-            buffer.Clear();
-            reachedEnd = true;
-            return;
-        }
-
-        const auto result = reader.Read(buffer);
-        if (!result.Succeeded()) {
-            buffer.Clear();
-            reachedEnd = true;
-            return;
-        }
-        renderedFrames += buffer.FrameCount();
-    });
-
-    const auto startResult = backend.Start();
-    AppendResult(output, "Start", startResult);
-    if (startResult.Succeeded()) {
-        const auto duration = std::chrono::duration<double>(
-            static_cast<double>(reader.FrameCount()) / reader.Format().sampleRate);
-        const auto deadline = std::chrono::steady_clock::now() +
-            std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration) +
-            std::chrono::seconds(5);
-        while (!reachedEnd && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-
-        const auto stopResult = backend.Stop();
-        AppendResult(output, "Stop", stopResult);
-    }
-
-    backend.Close();
-    output << "Rendered frames: " << renderedFrames.load() << '\n';
-    output << "Playback: " << (reachedEnd ? "PASS" : "TIMEOUT") << '\n';
-    output << "Close: PASS\n";
-
-    const auto text = output.str();
+    std::lock_guard lock(sessionMutex);
+    const auto text = StartPlaybackLocked();
     __android_log_print(ANDROID_LOG_INFO, kLogTag, "%s", text.c_str());
     return environment->NewStringUTF(text.c_str());
 }
-    #endif
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeSeekMiddle(JNIEnv* environment, jclass)
+{
+    std::lock_guard lock(sessionMutex);
+    const auto frame = player ? player->FrameCount() / 2 : 0;
+    const auto text = SeekLocked(frame, "Seek to middle");
+    return environment->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeRewind(JNIEnv* environment, jclass)
+{
+    std::lock_guard lock(sessionMutex);
+    if (!player) {
+        return environment->NewStringUTF("Player is not open.");
+    }
+    const auto text = ResultText(player->Rewind()) + ".\n\n" + StatusTextLocked();
+    return environment->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeSeekRelative(JNIEnv* environment, jclass, jlong seconds)
+{
+    std::lock_guard lock(sessionMutex);
+    if (!player) {
+        return environment->NewStringUTF("Player is not open.");
+    }
+
+    const auto current = player->RequestedPosition();
+    const auto total = player->FrameCount();
+    const auto delta = static_cast<std::int64_t>(player->Format().sampleRate) * seconds;
+    std::uint64_t target = current;
+    if (delta < 0) {
+        const auto distance = static_cast<std::uint64_t>(-delta);
+        target = distance > current ? 0 : current - distance;
+    } else {
+        const auto distance = static_cast<std::uint64_t>(delta);
+        target = distance > total - current ? total : current + distance;
+    }
+
+    const auto action = seconds < 0 ? "Seek backward 5 seconds" : "Seek forward 5 seconds";
+    const auto text = SeekLocked(target, action);
+    return environment->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeSeekEnd(JNIEnv* environment, jclass)
+{
+    std::lock_guard lock(sessionMutex);
+    const auto frame = player ? player->FrameCount() : 0;
+    const auto text = SeekLocked(frame, "Seek to end");
+    return environment->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeStatus(JNIEnv* environment, jclass)
+{
+    std::lock_guard lock(sessionMutex);
+    const auto text = StatusTextLocked();
+    return environment->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_luaudio_androidtests_MainActivity_nativeStopPlayback(JNIEnv*, jclass)
+{
+    std::lock_guard lock(sessionMutex);
+    if (player) {
+        player->Close();
+        player.reset();
+        backend.reset();
+    }
+}
+#endif

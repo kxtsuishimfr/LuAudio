@@ -7,17 +7,46 @@ namespace LuAudio::Audio {
 
 void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
 {
-    std::lock_guard lock(mutex_);
+    struct SourceSnapshot {
+        std::shared_ptr<Entry> entry;
+        std::shared_ptr<const AudioEffectChain> effects;
+        float gain = 1.0F;
+        bool paused = false;
+        bool seekPending = false;
+        std::uint64_t pendingSeekFrame = 0;
+    };
+
+    std::vector<SourceSnapshot> sources;
+    std::shared_ptr<const AudioEffectChain> masterEffects;
+    AudioFormat masterFormat;
+    {
+        std::lock_guard lock(mutex_);
+        sources.reserve(sources_.size());
+        for (const auto& entry : sources_) {
+            sources.push_back({
+                entry,
+                entry->effects,
+                entry->gain,
+                entry->paused,
+                entry->seekPending,
+                entry->pendingSeekFrame});
+            entry->seekPending = false;
+        }
+        masterEffects = masterEffects_;
+        masterFormat = masterConfig_.format;
+    }
+
     masterBuffer.Clear();
 
     const std::size_t frameCount = masterBuffer.FrameCount();
-    const std::size_t masterChannelCount = masterConfig_.format.channelCount;
+    const std::size_t masterChannelCount = masterFormat.channelCount;
     if (masterChannelCount == 0) {
         return;
     }
 
-    for (const auto& source : sources_) {
-        if (source->paused) {
+    for (const auto& sourceSnapshot : sources) {
+        const auto& source = sourceSnapshot.entry;
+        if (sourceSnapshot.paused) {
             continue;
         }
 
@@ -25,12 +54,10 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
         source->masterScratch.Resize(frameCount);
         source->masterScratch.Clear();
 
-        if (source->seekPending) {
-            if (!source->reader->Seek(source->pendingSeekFrame).Succeeded()) {
-                source->seekPending = false;
+        if (sourceSnapshot.seekPending) {
+            if (!source->reader->Seek(sourceSnapshot.pendingSeekFrame).Succeeded()) {
                 continue;
             }
-            source->seekPending = false;
         }
 
         if (!source->reader->Read(source->sourceScratch).Succeeded()) {
@@ -56,18 +83,18 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
             }
         }
 
-        if (source->effects && !source->effects->Process(source->masterScratch)) {
+        if (sourceSnapshot.effects && !sourceSnapshot.effects->Process(source->masterScratch)) {
             continue;
         }
 
         const std::size_t sampleCount = sourceFrameCount * masterChannelCount;
         float* masterSamples = masterBuffer.Data();
         for (std::size_t sample = 0; sample < sampleCount; ++sample) {
-            masterSamples[sample] += remappedSamples[sample] * source->gain;
+            masterSamples[sample] += remappedSamples[sample] * sourceSnapshot.gain;
         }
     }
 
-    if (masterEffects_ && !masterEffects_->Process(masterBuffer)) {
+    if (masterEffects && !masterEffects->Process(masterBuffer)) {
         masterBuffer.Clear();
         return;
     }

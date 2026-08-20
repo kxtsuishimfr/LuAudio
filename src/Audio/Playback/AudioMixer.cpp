@@ -99,11 +99,12 @@ void AudioMixer::Close() noexcept
     backend_.Close();
     backend_.SetCallback({});
 
-    std::vector<std::unique_ptr<Entry>> detachedSources;
+    std::vector<std::shared_ptr<Entry>> detachedSources;
     std::shared_ptr<const AudioEffectChain> detachedMasterEffects;
     {
         std::lock_guard lock(mutex_);
         detachedSources.swap(sources_);
+        retiredSources_.clear();
         detachedMasterEffects = std::move(masterEffects_);
         open_ = false;
         masterConfig_ = {};
@@ -125,7 +126,7 @@ Result AudioMixer::AddSource(std::unique_ptr<IAudioReader> reader, SourceId& out
         return Result::Failure(ResultCode::InvalidArgument, "Reader format is not supported by the mixer");
     }
 
-    auto entry = std::make_unique<Entry>();
+    auto entry = std::make_shared<Entry>();
     entry->reader = std::move(reader);
     entry->sourceScratch = AudioBuffer(sourceFormat, masterConfig_.framesPerBuffer);
     entry->masterScratch = AudioBuffer(masterConfig_.format, masterConfig_.framesPerBuffer);
@@ -150,7 +151,7 @@ Result AudioMixer::AddSource(std::unique_ptr<IAudioReader> reader, SourceId& out
 
 Result AudioMixer::RemoveSource(SourceId id)
 {
-    std::unique_ptr<Entry> detachedSource;
+    std::shared_ptr<Entry> detachedSource;
     {
         std::lock_guard lock(mutex_);
         const auto iterator = std::find_if(sources_.begin(), sources_.end(),
@@ -161,6 +162,7 @@ Result AudioMixer::RemoveSource(SourceId id)
 
         detachedSource = std::move(*iterator);
         sources_.erase(iterator);
+        retiredSources_.push_back(std::move(detachedSource));
     }
     return Result::Success();
 }

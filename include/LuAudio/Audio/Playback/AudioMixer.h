@@ -88,7 +88,8 @@ private:
 
     IAudioBackend& backend_;
     mutable std::mutex mutex_;
-    std::vector<std::unique_ptr<Entry>> sources_;
+    std::vector<std::shared_ptr<Entry>> sources_;
+    std::vector<std::shared_ptr<Entry>> retiredSources_;
     std::size_t maxSources_;
     SourceId nextId_ = 0;
     AudioStreamConfig masterConfig_;

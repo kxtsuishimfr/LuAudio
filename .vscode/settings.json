@@ -1,0 +1,6 @@
+{
+    "java.project.sourcePaths": [
+        "tests/Android/app/src/main/java"
+    ],
+    "java.project.outputPath": "tests/Android/app/build/vscode-java"
+}

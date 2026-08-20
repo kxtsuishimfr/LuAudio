@@ -15,3 +15,7 @@
 #include <LuAudio/Providers/Windows/Wasapi/WasapiBackend.h>
 #include <LuAudio/Providers/Windows/Wasapi/WasapiDevice.h>
 #endif
+
+#ifdef __ANDROID__
+#include <LuAudio/Providers/Android/Oboe/OboeBackend.h>
+#endif

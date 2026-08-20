@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.22.1)
 
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -9,7 +9,9 @@ project ("LuAudio")
 
 include(CTest)
 
-add_library(LuAudio SHARED
+option(LUAUDIO_ANDROID_TESTS "Build the Android test runner" OFF)
+
+set(LUAUDIO_SOURCES
     "src/Audio/Contracts/AudioFormat.cpp"
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
@@ -18,8 +20,6 @@ add_library(LuAudio SHARED
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
     "src/Utils/Diagnostics/Log.cpp"
-    "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
-    "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
     "include/LuAudio/Audio/Contracts/AudioStreamConfig.h"
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
@@ -29,10 +29,19 @@ add_library(LuAudio SHARED
     "include/LuAudio/Audio/Sources/WavFileReader.h"
     "include/LuAudio/Common.h"
     "include/LuAudio/LuAudio.h"
-    "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
-    "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
     "include/LuAudio/Utils/Diagnostics/Log.h"
 )
+
+if (WIN32)
+    list(APPEND LUAUDIO_SOURCES
+        "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
+        "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
+        "include/LuAudio/Providers/Windows/Wasapi/WasapiBackend.h"
+        "include/LuAudio/Providers/Windows/Wasapi/WasapiDevice.h"
+    )
+endif()
+
+add_library(LuAudio SHARED ${LUAUDIO_SOURCES})
 
 set_target_properties(LuAudio PROPERTIES
     OUTPUT_NAME "LuAudio"
@@ -54,6 +63,32 @@ endif()
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
     set_property(TARGET LuAudio PROPERTY CXX_STANDARD 20)
+endif()
+
+if (ANDROID)
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Oboe" "${CMAKE_CURRENT_BINARY_DIR}/oboe-build")
+
+    add_library(LuAudioOboe SHARED
+        "src/Providers/Android/Oboe/OboeBackend.cpp"
+        "include/LuAudio/Providers/Android/Oboe/OboeBackend.h"
+    )
+
+    target_include_directories(LuAudioOboe PRIVATE
+        "${PROJECT_SOURCE_DIR}/third_party/Oboe/include"
+    )
+    target_link_libraries(LuAudioOboe PRIVATE LuAudio oboe)
+    target_compile_features(LuAudioOboe PRIVATE cxx_std_20)
+
+    if (LUAUDIO_ANDROID_TESTS)
+        add_library(native-lib SHARED
+            "tests/Android/app/src/main/cpp/AndroidTestMain.cpp"
+        )
+        target_include_directories(native-lib PRIVATE
+            "${PROJECT_SOURCE_DIR}/include"
+        )
+        target_link_libraries(native-lib PRIVATE LuAudioOboe LuAudio log android)
+        target_compile_features(native-lib PRIVATE cxx_std_20)
+    endif()
 endif()
 
 if (BUILD_TESTING AND WIN32)

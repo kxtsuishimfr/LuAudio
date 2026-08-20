@@ -1,3 +1,15 @@
-out
-.vs
-private
+# Build output
+out/
+
+# Visual Studio
+.vs/
+
+# Private/local files
+private/
+
+# Android build output
+tests/Android/app/.cxx/
+tests/Android/app/build/
+tests/Android/.vscode/
+tests/Android/.gradle/
+tests/Android/build/

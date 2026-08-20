@@ -34,6 +34,14 @@ public:
      */
     virtual Result Start() = 0;
     /**
+     * @summary Reopens a failed or invalidated stream using its last configuration.
+     * @returns Operation result.
+     */
+    virtual Result Recover()
+    {
+        return Result::Failure(ResultCode::BackendUnavailable, "Backend recovery is not supported");
+    }
+    /**
      * @summary Stops audio rendering.
      * @returns Operation result.
      */

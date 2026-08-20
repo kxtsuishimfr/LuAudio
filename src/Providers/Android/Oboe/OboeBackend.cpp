@@ -69,6 +69,8 @@ public:
                 "Oboe backend is already open");
         }
 
+        requestedConfig_ = requestedConfig;
+
         oboe::AudioStreamBuilder builder;
         builder.setDirection(oboe::Direction::Output)
             ->setFormat(oboe::AudioFormat::Float)
@@ -114,6 +116,17 @@ public:
         }
         running_ = true;
         return Audio::Result::Success();
+    }
+
+    Audio::Result Recover()
+    {
+        if (!requestedConfig_.IsValid()) {
+            return Audio::Result::Failure(
+                Audio::ResultCode::InvalidState,
+                "Oboe backend has no configuration to recover");
+        }
+        Close();
+        return Open(requestedConfig_);
     }
 
     Audio::Result Stop()
@@ -185,6 +198,7 @@ private:
     Audio::AudioCallback callback_;
     Audio::AudioBuffer buffer_;
     Audio::AudioStreamConfig actualConfig_;
+    Audio::AudioStreamConfig requestedConfig_;
     bool running_ = false;
 };
 
@@ -212,6 +226,11 @@ Audio::Result OboeBackend::Open(const Audio::AudioStreamConfig& requestedConfig)
 Audio::Result OboeBackend::Start()
 {
     return implementation_->Start();
+}
+
+Audio::Result OboeBackend::Recover()
+{
+    return implementation_->Recover();
 }
 
 Audio::Result OboeBackend::Stop()

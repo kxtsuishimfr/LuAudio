@@ -28,6 +28,8 @@ public:
      * @returns Operation result.
      */
     Audio::Result Start() override;
+    /** @summary Reopens the current default output endpoint. */
+    Audio::Result Recover() override;
     /**
      * @summary Stops output.
      * @returns Operation result.

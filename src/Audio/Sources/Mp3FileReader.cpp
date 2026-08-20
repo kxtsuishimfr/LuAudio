@@ -84,8 +84,9 @@ void Mp3FileReader::DecodeWorker()
             std::unique_lock lock(mutex_);
             condition_.wait(lock, [this] {
                 return stopRequested_.load(std::memory_order_acquire) ||
-                    seekPending_ || bufferedSamples_.size() <
-                        kDecodeChunkFrames * kBufferedChunks * format_.channelCount;
+                    seekPending_ || (!decoderEnd_.load(std::memory_order_acquire) &&
+                        bufferedSamples_.size() <
+                            kDecodeChunkFrames * kBufferedChunks * format_.channelCount);
             });
             if (stopRequested_.load(std::memory_order_acquire)) {
                 return;

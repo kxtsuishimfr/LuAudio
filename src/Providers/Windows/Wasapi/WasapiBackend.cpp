@@ -25,6 +25,11 @@ Audio::Result WasapiBackend::Start()
     return device_->Start(callback_);
 }
 
+Audio::Result WasapiBackend::Recover()
+{
+    return device_->Recover();
+}
+
 Audio::Result WasapiBackend::Stop()
 {
     Utils::Log::Debug("Stopping WASAPI backend");

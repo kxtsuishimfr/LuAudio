@@ -9,6 +9,8 @@
 #include <mfreadwrite.h>
 #include <propvarutil.h>
 
+#include <mutex>
+
 #include <LuAudio/Providers/Windows/WAudioDecoder.h>
 
 namespace LuAudio::Providers::Windows {
@@ -29,6 +31,48 @@ Audio::Result Failure(Audio::ResultCode code, const char* message)
     return Audio::Result::Failure(code, message);
 }
 
+class MediaFoundationRuntime final {
+public:
+    static Audio::Result Acquire()
+    {
+        std::lock_guard lock(Mutex());
+        if (ReferenceCount() == 0) {
+            const HRESULT result = MFStartup(MF_VERSION);
+            if (FAILED(result)) {
+                return Failure(Audio::ResultCode::BackendUnavailable,
+                    "Windows media framework startup failed");
+            }
+        }
+        ++ReferenceCount();
+        return Audio::Result::Success();
+    }
+
+    static void Release() noexcept
+    {
+        std::lock_guard lock(Mutex());
+        if (ReferenceCount() == 0) {
+            return;
+        }
+        --ReferenceCount();
+        if (ReferenceCount() == 0) {
+            MFShutdown();
+        }
+    }
+
+private:
+    static std::mutex& Mutex()
+    {
+        static std::mutex mutex;
+        return mutex;
+    }
+
+    static std::size_t& ReferenceCount()
+    {
+        static std::size_t references = 0;
+        return references;
+    }
+};
+
 }
 
 WAudioDecoder::~WAudioDecoder()
@@ -36,7 +80,8 @@ WAudioDecoder::~WAudioDecoder()
     auto* reader = static_cast<IMFSourceReader*>(reader_);
     Release(reader);
     if (open_) {
-        MFShutdown();
+        MediaFoundationRuntime::Release();
+        open_ = false;
     }
 }
 
@@ -47,7 +92,7 @@ Audio::Result WAudioDecoder::Open(const Audio::AudioFile& file, Audio::DecoderIn
     Release(previousReader);
     reader_ = nullptr;
     if (open_) {
-        MFShutdown();
+        MediaFoundationRuntime::Release();
     }
     open_ = false;
     position_ = 0;
@@ -57,8 +102,9 @@ Audio::Result WAudioDecoder::Open(const Audio::AudioFile& file, Audio::DecoderIn
     if (!file.IsValid()) {
         return Failure(Audio::ResultCode::InvalidArgument, "Audio file path is empty");
     }
-    if (FAILED(MFStartup(MF_VERSION))) {
-        return Failure(Audio::ResultCode::BackendUnavailable, "Windows media framework startup failed");
+    const auto runtimeResult = MediaFoundationRuntime::Acquire();
+    if (!runtimeResult.Succeeded()) {
+        return runtimeResult;
     }
     open_ = true;
 
@@ -81,7 +127,7 @@ Audio::Result WAudioDecoder::Open(const Audio::AudioFile& file, Audio::DecoderIn
     Release(outputType);
     if (FAILED(result)) {
         Release(reader);
-        MFShutdown();
+        MediaFoundationRuntime::Release();
         open_ = false;
         return Failure(Audio::ResultCode::ProcessingFailed, "Unable to configure Windows audio decoder");
     }
@@ -99,7 +145,7 @@ Audio::Result WAudioDecoder::Open(const Audio::AudioFile& file, Audio::DecoderIn
     Release(currentType);
     if (FAILED(result) || sampleRate == 0 || channelCount == 0) {
         Release(reader);
-        MFShutdown();
+        MediaFoundationRuntime::Release();
         open_ = false;
         return Failure(Audio::ResultCode::ProcessingFailed, "Windows decoder returned invalid audio metadata");
     }

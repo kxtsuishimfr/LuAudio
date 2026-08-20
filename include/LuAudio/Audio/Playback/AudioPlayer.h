@@ -40,6 +40,11 @@ public:
      */
     Result Start();
     /**
+     * @summary Reopens the backend while preserving the current source position.
+     * @returns Operation result.
+     */
+    Result RecoverBackend();
+    /**
      * @summary Pauses backend rendering without discarding source or effect state.
      * @returns Operation result.
      */

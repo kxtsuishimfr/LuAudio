@@ -16,11 +16,13 @@ set(LUAUDIO_CORE_SOURCES
     "src/Audio/Contracts/AudioStreamConfig.cpp"
     "src/Audio/Contracts/IAudioBackend.cpp"
     "src/Audio/Contracts/Result.cpp"
+    "src/Audio/Rendering/OfflineRenderer.cpp"
     "src/Audio/Playback/AudioMixer.cpp"
     "src/Audio/Playback/AudioMixerRender.cpp"
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Processing/AudioEffectChain.cpp"
+    "src/Audio/Sinks/WavFileWriter.cpp"
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/Mp3FileReader.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
@@ -28,11 +30,14 @@ set(LUAUDIO_CORE_SOURCES
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
     "include/LuAudio/Audio/Contracts/AudioStreamConfig.h"
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
+    "include/LuAudio/Audio/Contracts/IAudioSink.h"
     "include/LuAudio/Audio/Contracts/Result.h"
     "include/LuAudio/Audio/Playback/AudioMixer.h"
     "include/LuAudio/Audio/Playback/AudioPlayer.h"
+    "include/LuAudio/Audio/Rendering/OfflineRenderer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
     "include/LuAudio/Audio/Processing/AudioEffectChain.h"
+    "include/LuAudio/Audio/Sinks/WavFileWriter.h"
     "include/LuAudio/Audio/Contracts/IAudioEffect.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/Mp3FileReader.h"
@@ -181,6 +186,18 @@ if (BUILD_TESTING AND WIN32)
     )
     target_compile_features(LuAudioTestPlugin PRIVATE cxx_std_20)
 
+    add_library(LuAudioHallReverbPlugin SHARED
+        "tests/Windows/Plugins/HallReverbPlugin.cpp"
+    )
+    target_include_directories(LuAudioHallReverbPlugin PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_compile_features(LuAudioHallReverbPlugin PRIVATE cxx_std_20)
+    set_target_properties(LuAudioHallReverbPlugin PROPERTIES
+        OUTPUT_NAME "ProfessionalHallReverb"
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+    )
+
     add_executable(LuAudioPluginTests
         "tests/Windows/Plugins/AudioEffectChainTests.cpp"
         "tests/Windows/Plugins/PluginManagerTests.cpp"
@@ -203,6 +220,12 @@ if (BUILD_TESTING AND WIN32)
     target_link_libraries(LuAudioMixerTests PRIVATE LuAudioCore GTest::gtest_main)
     target_compile_features(LuAudioMixerTests PRIVATE cxx_std_20)
 
+    add_executable(LuAudioOfflineRenderingTests
+        "tests/Windows/OfflineRenderingTests.cpp"
+    )
+    target_link_libraries(LuAudioOfflineRenderingTests PRIVATE LuAudioCore GTest::gtest_main)
+    target_compile_features(LuAudioOfflineRenderingTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -214,6 +237,7 @@ if (BUILD_TESTING AND WIN32)
     gtest_discover_tests(LuAudioProviderTests)
     gtest_discover_tests(LuAudioPluginTests)
     gtest_discover_tests(LuAudioMixerTests)
+    gtest_discover_tests(LuAudioOfflineRenderingTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"
@@ -226,6 +250,16 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioWasapiFilePlaybackTest PRIVATE LuAudio)
     target_compile_features(LuAudioWasapiFilePlaybackTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioExportAudioTest
+        "tests/Windows/Wasapi/ExportAudioTest.cpp"
+    )
+    target_link_libraries(LuAudioExportAudioTest PRIVATE LuAudio LuAudioPluginHost)
+    target_compile_features(LuAudioExportAudioTest PRIVATE cxx_std_20)
+    target_compile_definitions(LuAudioExportAudioTest PRIVATE
+        LUAUDIO_HALL_REVERB_PLUGIN_PATH="$<TARGET_FILE:LuAudioHallReverbPlugin>"
+    )
+    add_dependencies(LuAudioExportAudioTest LuAudioHallReverbPlugin)
 
     add_executable(LuAudioWasapiSeekPlaybackTest
         "tests/Windows/Wasapi/WasapiSeekPlaybackTest.cpp"

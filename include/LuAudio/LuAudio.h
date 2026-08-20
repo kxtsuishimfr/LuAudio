@@ -9,9 +9,12 @@
 #include <LuAudio/Audio/Contracts/IAudioDecoder.h>
 #include <LuAudio/Audio/Contracts/IAudioBackend.h>
 #include <LuAudio/Audio/Contracts/IAudioEffect.h>
+#include <LuAudio/Audio/Contracts/IAudioSink.h>
 #include <LuAudio/Audio/Contracts/Result.h>
 #include <LuAudio/Audio/Processing/AudioBuffer.h>
 #include <LuAudio/Audio/Processing/AudioEffectChain.h>
+#include <LuAudio/Audio/Rendering/OfflineRenderer.h>
+#include <LuAudio/Audio/Sinks/WavFileWriter.h>
 #include <LuAudio/Audio/Sources/AudioFile.h>
 #include <LuAudio/Audio/Sources/IAudioReader.h>
 #include <LuAudio/Audio/Sources/Mp3FileReader.h>

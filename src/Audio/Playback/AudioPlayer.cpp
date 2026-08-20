@@ -66,7 +66,34 @@ Result AudioPlayer::Start()
     if (!open_) {
         return Result::Failure(ResultCode::InvalidState, "Audio player is not open");
     }
+    const auto result = backend_.Start();
+    if (result.Succeeded()) {
+        return result;
+    }
+
+    const auto recoveryResult = RecoverBackend();
+    if (!recoveryResult.Succeeded()) {
+        return recoveryResult;
+    }
     return backend_.Start();
+}
+
+Result AudioPlayer::RecoverBackend()
+{
+    if (!open_ || !reader_) {
+        return Result::Failure(ResultCode::InvalidState, "Audio player is not open");
+    }
+
+    const auto result = backend_.Recover();
+    if (!result.Succeeded()) {
+        return result;
+    }
+    if (!FormatsMatch(reader_->Format(), backend_.ActualConfig().format)) {
+        return Result::Failure(ResultCode::BackendUnavailable, "Recovered backend format does not match reader");
+    }
+
+    backend_.SetCallback([this](AudioBuffer& buffer) { Render(buffer); });
+    return Result::Success();
 }
 
 Result AudioPlayer::Pause()
@@ -94,7 +121,7 @@ Result AudioPlayer::Resume()
         return Result::Success();
     }
 
-    const auto result = backend_.Start();
+    const auto result = Start();
     if (result.Succeeded()) {
         paused_ = false;
     }

@@ -30,6 +30,8 @@ public:
      * @returns Operation result.
      */
     Audio::Result Start() override;
+    /** @summary Reopens the default Android output stream. */
+    Audio::Result Recover() override;
     /**
      * @summary Stops audio rendering.
      * @returns Operation result.

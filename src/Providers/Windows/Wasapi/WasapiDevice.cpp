@@ -75,6 +75,8 @@ public:
             return Audio::Result::Failure(Audio::ResultCode::InvalidArgument, "Invalid WASAPI configuration");
         }
 
+        requestedConfig_ = requestedConfig;
+
         Close();
         const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (FAILED(comResult)) {
@@ -165,6 +167,17 @@ public:
         renderBuffer_ = Audio::AudioBuffer(actualConfig_.format, bufferFrameCount_);
         Utils::Log::Info("WASAPI device opened");
         return Audio::Result::Success();
+    }
+
+    Audio::Result Recover()
+    {
+        if (!requestedConfig_.IsValid()) {
+            return Audio::Result::Failure(
+                Audio::ResultCode::InvalidState,
+                "WASAPI device has no configuration to recover");
+        }
+        Close();
+        return Open(requestedConfig_);
     }
 
     Audio::Result Start(Audio::AudioCallback callback)
@@ -294,6 +307,7 @@ private:
     std::thread renderThread_;
     Audio::AudioCallback callback_;
     Audio::AudioStreamConfig actualConfig_;
+    Audio::AudioStreamConfig requestedConfig_;
     Audio::AudioBuffer renderBuffer_;
     UINT32 bufferFrameCount_ = 0;
     HANDLE eventHandle_ = nullptr;
@@ -313,6 +327,13 @@ private:
     }
 
     Audio::Result Start(Audio::AudioCallback)
+    {
+        return Audio::Result::Failure(
+            Audio::ResultCode::BackendUnavailable,
+            "WASAPI is only available on Windows");
+    }
+
+    Audio::Result Recover()
     {
         return Audio::Result::Failure(
             Audio::ResultCode::BackendUnavailable,
@@ -352,6 +373,11 @@ Audio::Result WasapiDevice::Open(const Audio::AudioStreamConfig& requestedConfig
 Audio::Result WasapiDevice::Start(Audio::AudioCallback callback)
 {
     return implementation_->Start(std::move(callback));
+}
+
+Audio::Result WasapiDevice::Recover()
+{
+    return implementation_->Recover();
 }
 
 Audio::Result WasapiDevice::Stop()

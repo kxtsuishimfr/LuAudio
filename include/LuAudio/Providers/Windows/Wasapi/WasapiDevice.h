@@ -28,6 +28,8 @@ public:
      * @returns Operation result.
      */
     Audio::Result Start(Audio::AudioCallback callback);
+    /** @summary Reopens the current default output endpoint. */
+    Audio::Result Recover();
     /**
      * @summary Stops output.
      * @returns Operation result.

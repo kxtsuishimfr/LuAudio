@@ -185,9 +185,21 @@ bool GetParameter(void* instancePointer, const char* name, float* value)
     return true;
 }
 
+const LuAudio::Plugins::PluginParameterDescriptor Parameters[]{
+    {"room_size", "Room Size", LuAudio::Plugins::PluginParameterType::Float, 0.84F, 0.0F, 1.0F, 0.01F, "", "", 0, nullptr},
+    {"damping", "Damping", LuAudio::Plugins::PluginParameterType::Float, 0.32F, 0.0F, 0.99F, 0.01F, "", "", 0, nullptr},
+    {"wet", "Wet", LuAudio::Plugins::PluginParameterType::Float, 0.28F, 0.0F, 1.0F, 0.01F, "", "", 0, nullptr},
+    {"width", "Width", LuAudio::Plugins::PluginParameterType::Float, 0.85F, 0.0F, 1.0F, 0.01F, "", "", 0, nullptr}};
+
 const LuAudio::Plugins::PluginDescriptor Descriptor{
     LuAudio::Plugins::PluginAbiVersion,
     "ProfessionalHallReverb",
+    "com.example.hall-reverb",
+    "1.0.0",
+    nullptr,
+    nullptr,
+    4,
+    Parameters,
     &Create,
     &Destroy,
     &Process,

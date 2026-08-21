@@ -234,6 +234,7 @@ if (BUILD_TESTING AND WIN32)
     add_library(LuAudioTestPlugin SHARED
         "tests/Windows/Plugins/TestPlugin.cpp"
     )
+    target_link_libraries(LuAudioTestPlugin PRIVATE LuAudioPluginContracts)
     target_include_directories(LuAudioTestPlugin PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
@@ -242,6 +243,7 @@ if (BUILD_TESTING AND WIN32)
     add_library(LuAudioHallReverbPlugin SHARED
         "tests/Windows/Plugins/HallReverbPlugin.cpp"
     )
+    target_link_libraries(LuAudioHallReverbPlugin PRIVATE LuAudioPluginContracts)
     target_include_directories(LuAudioHallReverbPlugin PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )

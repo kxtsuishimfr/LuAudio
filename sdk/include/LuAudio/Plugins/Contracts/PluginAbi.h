@@ -29,9 +29,39 @@ using PluginSetParameter = bool (*)(void* instance, const char* name, float valu
 using PluginGetParameter = bool (*)(void* instance, const char* name, float* value);
 using PluginReset = void (*)(void* instance);
 
+enum class PluginParameterType : std::uint32_t {
+    Float = 0,
+    Enum = 1
+};
+
+struct PluginParameterChoice {
+    const char* name;
+    float value;
+};
+
+struct PluginParameterDescriptor {
+    const char* key;
+    const char* name;
+    PluginParameterType type;
+    float default_value;
+    float minimum;
+    float maximum;
+    float step;
+    const char* unit;
+    const char* group;
+    std::uint32_t choice_count;
+    const PluginParameterChoice* choices;
+};
+
 struct PluginDescriptor {
     std::uint32_t abi_version;
     const char* name;
+    const char* id;
+    const char* version;
+    const char* description;
+    const char* vendor;
+    std::uint32_t parameter_count;
+    const PluginParameterDescriptor* parameters;
     PluginCreate create;
     PluginDestroy destroy;
     PluginProcess process;

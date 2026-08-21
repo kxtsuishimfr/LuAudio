@@ -13,11 +13,24 @@ class PluginTrampoline final {
         "LUAUDIO_DECLARE_PLUGIN requires a class derived from PluginBase");
 
 public:
-    static const PluginDescriptor* Descriptor(const char* display_name) noexcept
+    static const PluginDescriptor* Descriptor(
+        const char* display_name,
+        const char* id,
+        const char* version,
+        const char* description,
+        const char* vendor,
+        std::uint32_t parameter_count,
+        const PluginParameterDescriptor* parameters) noexcept
     {
         static const PluginDescriptor descriptor{
             PluginAbiVersion,
             display_name,
+            id,
+            version,
+            description,
+            vendor,
+            parameter_count,
+            parameters,
             &Create,
             &Destroy,
             &Process,

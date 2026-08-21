@@ -64,4 +64,34 @@ const char* PluginHandle::Name() const noexcept
     return descriptor_->name;
 }
 
+const char* PluginHandle::Id() const noexcept
+{
+    return descriptor_->id;
+}
+
+const char* PluginHandle::Version() const noexcept
+{
+    return descriptor_->version;
+}
+
+const char* PluginHandle::Description() const noexcept
+{
+    return descriptor_->description;
+}
+
+const char* PluginHandle::Vendor() const noexcept
+{
+    return descriptor_->vendor;
+}
+
+std::uint32_t PluginHandle::ParameterCount() const noexcept
+{
+    return descriptor_->parameter_count;
+}
+
+const PluginParameterDescriptor* PluginHandle::Parameters() const noexcept
+{
+    return descriptor_->parameters;
+}
+
 }

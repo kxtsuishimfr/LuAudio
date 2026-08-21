@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).resolve()
-ROOT_DIR = SCRIPT_PATH.parents[2]
+ROOT_DIR = SCRIPT_PATH.parents[3]
 BUILD_DIR = ROOT_DIR / "out" / "build" / "x64-debug"
 VS_DEV_CMD = Path(
     r"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat"

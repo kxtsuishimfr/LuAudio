@@ -11,6 +11,11 @@ using namespace LuAudio::Plugins;
 using LuAudio::Plugins::SDK::PluginBase;
 using LuAudio::Plugins::SDK::PluginTrampoline;
 
+const PluginParameterDescriptor GainParameters[]{{
+    "gain", "Gain", PluginParameterType::Float, 1.0F, 0.0F, 4.0F, 0.01F,
+    "", "", 0, nullptr}};
+const PluginParameterDescriptor EmptyParameters[1]{};
+
 class GainPlugin final : public PluginBase {
 public:
     bool Init(const PluginInstanceConfig& config) override
@@ -84,7 +89,8 @@ public:
 
 TEST(PluginTrampolineTests, CreatesProcessesParametersAndResets)
 {
-    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor("Gain");
+    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor(
+        "Gain", "com.example.gain", "1.0.0", nullptr, nullptr, 1, GainParameters);
     ASSERT_NE(descriptor, nullptr);
     EXPECT_EQ(descriptor->abi_version, PluginAbiVersion);
     EXPECT_STREQ(descriptor->name, "Gain");
@@ -118,7 +124,8 @@ TEST(PluginTrampolineTests, CreatesProcessesParametersAndResets)
 
 TEST(PluginTrampolineTests, RejectsFailedInitialization)
 {
-    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor("Gain");
+    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor(
+        "Gain", "com.example.gain", "1.0.0", nullptr, nullptr, 1, GainParameters);
     const PluginInstanceConfig invalid_config{48000, 1, 256};
 
     EXPECT_EQ(descriptor->create(&invalid_config), nullptr);
@@ -126,7 +133,9 @@ TEST(PluginTrampolineTests, RejectsFailedInitialization)
 
 TEST(PluginTrampolineTests, ConvertsExceptionsAtTheAbiBoundary)
 {
-    const auto* descriptor = PluginTrampoline<ThrowingPlugin>::Descriptor("Throwing");
+    const auto* descriptor = PluginTrampoline<ThrowingPlugin>::Descriptor(
+        "Throwing", "com.example.throwing", "1.0.0", nullptr, nullptr, 0,
+        EmptyParameters);
     const PluginInstanceConfig config{48000, 2, 256};
     EXPECT_EQ(descriptor->create(&config), nullptr);
 
@@ -142,7 +151,8 @@ TEST(PluginTrampolineTests, ConvertsExceptionsAtTheAbiBoundary)
 
 TEST(PluginTrampolineTests, RejectsNullAbiInputs)
 {
-    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor("Gain");
+    const auto* descriptor = PluginTrampoline<GainPlugin>::Descriptor(
+        "Gain", "com.example.gain", "1.0.0", nullptr, nullptr, 1, GainParameters);
     const PluginInstanceConfig config{48000, 2, 256};
     void* instance = descriptor->create(&config);
     ASSERT_NE(instance, nullptr);

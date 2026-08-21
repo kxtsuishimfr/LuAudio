@@ -100,4 +100,17 @@ private:
 
 }
 
-LUAUDIO_DECLARE_PLUGIN(BitcrusherPlugin, "Bitcrusher")
+const LuAudio::Plugins::PluginParameterDescriptor BitcrusherParameters[]{
+    {"bits", "Bits", LuAudio::Plugins::PluginParameterType::Float, 6.0F, 1.0F, 16.0F, 1.0F, "bits", "", 0, nullptr},
+    {"hold", "Hold", LuAudio::Plugins::PluginParameterType::Float, 4.0F, 1.0F, 32.0F, 1.0F, "samples", "", 0, nullptr},
+    {"drive", "Drive", LuAudio::Plugins::PluginParameterType::Float, 1.35F, 1.0F, 4.0F, 0.01F, "", "", 0, nullptr}};
+
+LUAUDIO_DECLARE_PLUGIN(
+    BitcrusherPlugin,
+    "Bitcrusher",
+    "com.example.bitcrusher",
+    "1.0.0",
+    nullptr,
+    nullptr,
+    3,
+    BitcrusherParameters)

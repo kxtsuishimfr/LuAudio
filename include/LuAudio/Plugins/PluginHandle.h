@@ -31,6 +31,18 @@ public:
     bool GetParameter(std::string_view name, float& value) noexcept;
     /** @summary Gets the plugin name. */
     const char* Name() const noexcept;
+    /** @summary Gets the stable plugin identifier. */
+    const char* Id() const noexcept;
+    /** @summary Gets the plugin version. */
+    const char* Version() const noexcept;
+    /** @summary Gets the optional plugin description. */
+    const char* Description() const noexcept;
+    /** @summary Gets the optional plugin vendor. */
+    const char* Vendor() const noexcept;
+    /** @summary Gets the number of declared parameters. */
+    std::uint32_t ParameterCount() const noexcept;
+    /** @summary Gets the declared parameter metadata. */
+    const PluginParameterDescriptor* Parameters() const noexcept;
 
 private:
     std::unique_ptr<Providers::IPluginLibrary> library_;

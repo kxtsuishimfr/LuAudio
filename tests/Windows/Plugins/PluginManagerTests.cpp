@@ -15,6 +15,10 @@ struct TestInstance {
     float gain = 1.0F;
 };
 
+const PluginParameterDescriptor Parameters[]{{
+    "gain", "Gain", PluginParameterType::Float, 1.0F, 0.0F, 4.0F, 0.01F,
+    "", "", 0, nullptr}};
+
 void* CreateInstance(const PluginInstanceConfig*)
 {
     return new TestInstance();
@@ -37,6 +41,12 @@ bool ProcessInstance(void* instance, PluginAudioBuffer* buffer)
 const PluginDescriptor ValidDescriptor{
     PluginAbiVersion,
     "TestPlugin",
+    "com.example.test",
+    "1.0.0",
+    nullptr,
+    nullptr,
+    1,
+    Parameters,
     &CreateInstance,
     &DestroyInstance,
     &ProcessInstance,
@@ -115,6 +125,12 @@ TEST(PluginManagerTests, LoadsAndProcessesPlugin)
     ASSERT_TRUE(loadResult.Succeeded());
     ASSERT_NE(plugin, nullptr);
     EXPECT_STREQ(plugin->Name(), "TestPlugin");
+    EXPECT_STREQ(plugin->Id(), "com.example.test");
+    EXPECT_STREQ(plugin->Version(), "1.0.0");
+    ASSERT_EQ(plugin->ParameterCount(), 1);
+    ASSERT_NE(plugin->Parameters(), nullptr);
+    EXPECT_STREQ(plugin->Parameters()[0].key, "gain");
+    EXPECT_STREQ(plugin->Parameters()[0].name, "Gain");
     ASSERT_TRUE(plugin->Create({48000, 2, 256}).Succeeded());
 
     float samples[] = {1.0F, 2.0F, 3.0F, 4.0F};

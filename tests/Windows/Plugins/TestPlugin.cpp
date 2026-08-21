@@ -47,9 +47,19 @@ bool GetParameter(void* instance, const char* name, float* value)
     return true;
 }
 
+const LuAudio::Plugins::PluginParameterDescriptor Parameters[]{{
+    "gain", "Gain", LuAudio::Plugins::PluginParameterType::Float, 1.0F,
+    0.0F, 4.0F, 0.01F, "", "", 0, nullptr}};
+
 const LuAudio::Plugins::PluginDescriptor Descriptor{
     LuAudio::Plugins::PluginAbiVersion,
     "FixturePlugin",
+    "com.example.fixture",
+    "1.0.0",
+    nullptr,
+    nullptr,
+    1,
+    Parameters,
     &Create,
     &Destroy,
     &Process,

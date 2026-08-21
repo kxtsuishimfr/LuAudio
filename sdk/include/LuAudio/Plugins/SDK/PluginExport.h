@@ -8,8 +8,10 @@
 #define LUAUDIO_PLUGIN_ABI extern "C" __attribute__((visibility("default")))
 #endif
 
-#define LUAUDIO_DECLARE_PLUGIN(PluginClass, displayName) \
+#define LUAUDIO_DECLARE_PLUGIN(PluginClass, displayName, pluginId, pluginVersion, pluginDescription, pluginVendor, parameterCount, parameterMetadata) \
     LUAUDIO_PLUGIN_ABI const LuAudio::Plugins::PluginDescriptor* LuAudio_GetPluginDescriptor() \
     { \
-        return LuAudio::Plugins::SDK::PluginTrampoline<PluginClass>::Descriptor(displayName); \
+        return LuAudio::Plugins::SDK::PluginTrampoline<PluginClass>::Descriptor( \
+            displayName, pluginId, pluginVersion, pluginDescription, pluginVendor, \
+            parameterCount, parameterMetadata); \
     }

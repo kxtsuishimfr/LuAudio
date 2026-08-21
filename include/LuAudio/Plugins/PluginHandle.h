@@ -3,7 +3,7 @@
 #include <LuAudio/Common.h>
 
 #include <LuAudio/Audio/Contracts/Result.h>
-#include <LuAudio/Plugins/PluginAbi.h>
+#include <LuAudio/Plugins/Contracts/PluginAbi.h>
 #include <LuAudio/Providers/Contracts/IPluginLibrary.h>
 
 namespace LuAudio::Plugins {

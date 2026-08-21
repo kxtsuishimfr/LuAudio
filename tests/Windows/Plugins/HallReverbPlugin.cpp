@@ -1,4 +1,4 @@
-#include <LuAudio/Plugins/PluginAbi.h>
+#include <LuAudio/Plugins/Contracts/PluginAbi.h>
 
 #include <algorithm>
 #include <cmath>

@@ -9,7 +9,34 @@ project ("LuAudio")
 
 include(CTest)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LuAudioPlugin.cmake")
+
 option(LUAUDIO_ANDROID_TESTS "Build the Android test runner" OFF)
+set(LUAUDIO_ANDROID_TEST_SOURCE
+    "${PROJECT_SOURCE_DIR}/tests/Android/app/src/main/cpp/AndroidTestMain.cpp"
+    CACHE FILEPATH "Android test runner native source")
+
+add_library(LuAudioPluginContracts INTERFACE)
+target_include_directories(LuAudioPluginContracts INTERFACE
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sdk/include>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
+set_target_properties(LuAudioPluginContracts PROPERTIES
+    EXPORT_NAME PluginContracts)
+
+add_library(LuAudioPluginSDK INTERFACE)
+target_link_libraries(LuAudioPluginSDK INTERFACE LuAudioPluginContracts)
+target_include_directories(LuAudioPluginSDK INTERFACE
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sdk/include>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
+set_target_properties(LuAudioPluginSDK PROPERTIES
+    EXPORT_NAME PluginSDK)
+
+add_library(LuAudio::PluginContracts ALIAS LuAudioPluginContracts)
+add_library(LuAudio::PluginSDK ALIAS LuAudioPluginSDK)
 
 set(LUAUDIO_CORE_SOURCES
     "src/Audio/Contracts/AudioFormat.cpp"
@@ -73,7 +100,6 @@ add_library(LuAudioPluginHost SHARED
     "src/Plugins/PluginEffectAdapter.cpp"
     "src/Plugins/PluginHandle.cpp"
     "src/Plugins/PluginManager.cpp"
-    "include/LuAudio/Plugins/PluginAbi.h"
     "include/LuAudio/Plugins/PluginEffectAdapter.h"
     "include/LuAudio/Plugins/PluginHandle.h"
     "include/LuAudio/Plugins/PluginManager.h"
@@ -82,6 +108,7 @@ add_library(LuAudioPluginHost SHARED
 target_include_directories(LuAudioPluginHost PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
+target_link_libraries(LuAudioPluginHost PUBLIC LuAudioPluginContracts)
 target_link_libraries(LuAudioPluginHost PRIVATE LuAudioCore)
 target_compile_features(LuAudioPluginHost PRIVATE cxx_std_20)
 
@@ -130,6 +157,7 @@ if (ANDROID)
     )
     target_include_directories(LuAudioHallReverbPlugin PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+        "${PROJECT_SOURCE_DIR}/sdk/include"
     )
     target_compile_features(LuAudioHallReverbPlugin PRIVATE cxx_std_20)
     set_target_properties(LuAudioHallReverbPlugin PROPERTIES
@@ -161,9 +189,19 @@ if (ANDROID)
     add_library(LuAudio::PluginHost ALIAS LuAudioPluginHost)
     add_library(LuAudio::AndroidProvider ALIAS LuAudioAndroidProvider)
 
+    add_library(LuAudioBitcrusherPlugin SHARED
+        "tests/Windows/Plugins/BitcrusherPlugin.cpp"
+    )
+    target_include_directories(LuAudioBitcrusherPlugin PRIVATE
+        "${PROJECT_SOURCE_DIR}/sdk/include"
+    )
+    target_compile_features(LuAudioBitcrusherPlugin PRIVATE cxx_std_20)
+    set_target_properties(LuAudioBitcrusherPlugin PROPERTIES
+        OUTPUT_NAME "Bitcrusher")
+
     if (LUAUDIO_ANDROID_TESTS)
         add_library(native-lib SHARED
-            "tests/Android/app/src/main/cpp/AndroidTestMain.cpp"
+            "${LUAUDIO_ANDROID_TEST_SOURCE}"
         )
         target_include_directories(native-lib PRIVATE
             "${PROJECT_SOURCE_DIR}/include"
@@ -172,13 +210,14 @@ if (ANDROID)
             LuAudioCore
             LuAudioPluginHost
             LuAudioAndroidProvider
-            LuAudioHallReverbPlugin
+            LuAudioBitcrusherPlugin
             log
             android
         )
-        add_dependencies(native-lib LuAudioHallReverbPlugin)
+        add_dependencies(native-lib LuAudioBitcrusherPlugin)
         target_compile_features(native-lib PRIVATE cxx_std_20)
     endif()
+
 endif()
 
 if (BUILD_TESTING AND WIN32)
@@ -212,6 +251,16 @@ if (BUILD_TESTING AND WIN32)
         WINDOWS_EXPORT_ALL_SYMBOLS ON
     )
 
+    add_library(LuAudioBitcrusherPlugin MODULE
+        "tests/Windows/Plugins/BitcrusherPlugin.cpp"
+    )
+    target_link_libraries(LuAudioBitcrusherPlugin PRIVATE LuAudioPluginSDK)
+    target_compile_features(LuAudioBitcrusherPlugin PRIVATE cxx_std_20)
+    set_target_properties(LuAudioBitcrusherPlugin PROPERTIES
+        OUTPUT_NAME "Bitcrusher"
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
+
     add_executable(LuAudioPluginTests
         "tests/Windows/Plugins/AudioEffectChainTests.cpp"
         "tests/Windows/Plugins/PluginManagerTests.cpp"
@@ -227,6 +276,15 @@ if (BUILD_TESTING AND WIN32)
         LUAUDIO_TEST_PLUGIN_PATH="$<TARGET_FILE:LuAudioTestPlugin>"
     )
     add_dependencies(LuAudioPluginTests LuAudioTestPlugin)
+
+    add_executable(LuAudioPluginSdkTests
+        "tests/Plugins/PluginTrampolineTests.cpp"
+    )
+    target_link_libraries(LuAudioPluginSdkTests PRIVATE
+        LuAudioPluginSDK
+        GTest::gtest_main
+    )
+    target_compile_features(LuAudioPluginSdkTests PRIVATE cxx_std_20)
 
     add_executable(LuAudioMixerTests
         "tests/Windows/AudioMixerTests.cpp"
@@ -250,6 +308,7 @@ if (BUILD_TESTING AND WIN32)
     include(GoogleTest)
     gtest_discover_tests(LuAudioProviderTests)
     gtest_discover_tests(LuAudioPluginTests)
+    gtest_discover_tests(LuAudioPluginSdkTests)
     gtest_discover_tests(LuAudioMixerTests)
     gtest_discover_tests(LuAudioOfflineRenderingTests)
 
@@ -292,4 +351,37 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioReverbSeekTest PRIVATE LuAudio)
     target_compile_features(LuAudioReverbSeekTest PRIVATE cxx_std_20)
+
+    add_executable(LuAudioBitcrusherPlaybackTest
+        "tests/Windows/Plugins/BitcrusherPlaybackTest.cpp"
+    )
+    target_link_libraries(LuAudioBitcrusherPlaybackTest PRIVATE
+        LuAudio
+        LuAudioPluginHost
+    )
+    target_compile_features(LuAudioBitcrusherPlaybackTest PRIVATE cxx_std_20)
+    target_compile_definitions(LuAudioBitcrusherPlaybackTest PRIVATE
+        LUAUDIO_BITCRUSHER_PLUGIN_PATH="$<TARGET_FILE:LuAudioBitcrusherPlugin>"
+    )
+    add_dependencies(LuAudioBitcrusherPlaybackTest LuAudioBitcrusherPlugin)
 endif()
+
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LuAudioPlugin.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LuAudioPluginSDK")
+install(TARGETS LuAudioPluginContracts LuAudioPluginSDK
+    EXPORT LuAudioPluginSDKTargets)
+install(EXPORT LuAudioPluginSDKTargets
+    FILE LuAudioPluginSDKTargets.cmake
+    NAMESPACE LuAudio::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LuAudioPluginSDK")
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LuAudioPluginSDKConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/LuAudioPluginSDKConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LuAudioPluginSDK")
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/LuAudioPluginSDKConfig.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LuAudioPluginSDK")

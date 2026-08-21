@@ -8,8 +8,4 @@ out/
 private/
 
 # Android build output
-tests/Android/app/.cxx/
-tests/Android/app/build/
-tests/Android/.vscode/
-tests/Android/.gradle/
-tests/Android/build/
+tests/Android/

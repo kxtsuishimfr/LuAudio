@@ -10,7 +10,7 @@ options = {
     "postprocessors": [
         {
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "wav",
+            "preferredcodec": "mp3",
         }
     ],
     "js_runtimes": {
@@ -19,4 +19,4 @@ options = {
 }
 
 with yt_dlp.YoutubeDL(options) as ydl:
-    ydl.download(["https://youtu.be/nLRo25fBxGc"])
+    ydl.download(["https://youtu.be/0tSx6X-oT4A?si=GwSVPw8h6A1tgP47"])

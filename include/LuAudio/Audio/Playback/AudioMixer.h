@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -60,6 +61,8 @@ public:
     Result SetSourcePaused(SourceId id, bool paused);
     /** @summary Checks whether a source has reached EOF. */
     bool IsSourceFinished(SourceId id) const;
+    /** @summary Gets the last source frame rendered by the mixer. */
+    std::uint64_t SourcePosition(SourceId id) const noexcept;
 
     /** @summary Publishes an immutable effect-chain snapshot for a source. */
     Result SetSourceEffects(SourceId id, std::shared_ptr<const AudioEffectChain> chain);
@@ -80,6 +83,7 @@ private:
         bool paused = false;
         bool seekPending = false;
         std::uint64_t pendingSeekFrame = 0;
+        std::atomic<std::uint64_t> renderedPosition = 0;
     };
 
     void Render(AudioBuffer& masterBuffer) noexcept;

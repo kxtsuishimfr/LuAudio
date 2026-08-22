@@ -63,6 +63,7 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
         if (!source->reader->Read(source->sourceScratch).Succeeded()) {
             continue;
         }
+        source->renderedPosition.store(source->reader->Position(), std::memory_order_release);
 
         const std::size_t sourceChannelCount = source->sourceScratch.Format().channelCount;
         const std::size_t sourceFrameCount = std::min(frameCount, source->sourceScratch.FrameCount());

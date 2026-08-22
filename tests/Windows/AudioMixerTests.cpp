@@ -26,6 +26,7 @@ public:
         for (std::size_t index = 0; index < destination.SampleCount(); ++index) {
             destination.Data()[index] = sampleValue_;
         }
+        position_ += destination.FrameCount();
         return Result::Success();
     }
 
@@ -90,6 +91,11 @@ public:
     void SetSampleValue(float sampleValue) noexcept
     {
         sampleValue_ = sampleValue;
+    }
+
+    void SetReadFailure(bool readFailure) noexcept
+    {
+        readFailure_ = readFailure;
     }
 
     std::size_t ReadCount() const noexcept
@@ -284,6 +290,117 @@ TEST(AudioMixerTests, PausedSourcesAreNotRead)
     }
 }
 
+TEST(AudioMixerTests, ReportsPositionAfterSuccessfulRender)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 1);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    AudioMixer::SourceId sourceId = 0;
+    ASSERT_TRUE(mixer.AddSource(MakeReader(), sourceId).Succeeded());
+
+    EXPECT_EQ(mixer.SourcePosition(sourceId), 0U);
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(sourceId), output.FrameCount());
+}
+
+TEST(AudioMixerTests, PositionDoesNotAdvanceWhileSourceIsPaused)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 1);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    AudioMixer::SourceId sourceId = 0;
+    ASSERT_TRUE(mixer.AddSource(MakeReader(), sourceId).Succeeded());
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+    const auto positionBeforePause = mixer.SourcePosition(sourceId);
+    ASSERT_TRUE(mixer.SetSourcePaused(sourceId, true).Succeeded());
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(sourceId), positionBeforePause);
+}
+
+TEST(AudioMixerTests, TracksPositionsIndependentlyForMultipleSources)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 2);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+
+    auto firstReader = MakeReader();
+    auto secondReader = MakeReader();
+    AudioMixer::SourceId firstId = 0;
+    AudioMixer::SourceId secondId = 0;
+    ASSERT_TRUE(mixer.AddSource(std::move(firstReader), firstId).Succeeded());
+    ASSERT_TRUE(mixer.AddSource(std::move(secondReader), secondId).Succeeded());
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+    EXPECT_EQ(mixer.SourcePosition(firstId), output.FrameCount());
+    EXPECT_EQ(mixer.SourcePosition(secondId), output.FrameCount());
+
+    ASSERT_TRUE(mixer.SetSourcePaused(firstId, true).Succeeded());
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(firstId), output.FrameCount());
+    EXPECT_EQ(mixer.SourcePosition(secondId), output.FrameCount() * 2);
+}
+
+TEST(AudioMixerTests, PositionPublishesDeferredSeekOnNextRender)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 1);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    AudioMixer::SourceId sourceId = 0;
+    ASSERT_TRUE(mixer.AddSource(MakeReader(), sourceId).Succeeded());
+    ASSERT_TRUE(mixer.SeekSource(sourceId, 12).Succeeded());
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(sourceId), 12U + output.FrameCount());
+}
+
+TEST(AudioMixerTests, PublishesIndependentPositionsForMultipleDeferredSeeks)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 2);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    AudioMixer::SourceId firstId = 0;
+    AudioMixer::SourceId secondId = 0;
+    ASSERT_TRUE(mixer.AddSource(MakeReader(), firstId).Succeeded());
+    ASSERT_TRUE(mixer.AddSource(MakeReader(), secondId).Succeeded());
+    ASSERT_TRUE(mixer.SeekSource(firstId, 8).Succeeded());
+    ASSERT_TRUE(mixer.SeekSource(secondId, 24).Succeeded());
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(firstId), 8U + output.FrameCount());
+    EXPECT_EQ(mixer.SourcePosition(secondId), 24U + output.FrameCount());
+}
+
+TEST(AudioMixerTests, FailedReadDoesNotChangePublishedPosition)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 1);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    auto reader = MakeReader();
+    TestReader* readerPointer = reader.get();
+    AudioMixer::SourceId sourceId = 0;
+    ASSERT_TRUE(mixer.AddSource(std::move(reader), sourceId).Succeeded());
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+    const auto positionBeforeFailure = mixer.SourcePosition(sourceId);
+    readerPointer->SetReadFailure(true);
+    backend.Render(output);
+
+    EXPECT_EQ(mixer.SourcePosition(sourceId), positionBeforeFailure);
+}
+
 TEST(AudioMixerTests, ProcessesSourceAndMasterEffects)
 {
     TestBackend backend;
@@ -326,7 +443,7 @@ TEST(AudioMixerTests, AppliesDeferredSeekBeforeReading)
     backend.Render(output);
 
     EXPECT_EQ(readerPointer->SeekCount(), 1U);
-    EXPECT_EQ(readerPointer->Position(), 12U);
+    EXPECT_EQ(readerPointer->Position(), 12U + output.FrameCount());
     EXPECT_EQ(readerPointer->ReadCount(), 1U);
 }
 

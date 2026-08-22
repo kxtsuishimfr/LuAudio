@@ -100,19 +100,59 @@ private:
     const PluginDescriptor* descriptor_;
 };
 
-TEST(PluginManagerTests, RejectsInvalidAbiVersion)
+void ExpectRejected(const PluginDescriptor& descriptor)
 {
-    auto descriptor = ValidDescriptor;
-    descriptor.abi_version = PluginAbiVersion + 1;
     FakeProvider provider(&descriptor);
     PluginManager manager(provider);
     std::unique_ptr<PluginHandle> plugin;
 
-    const auto result = manager.Load("invalid.dll", plugin);
+    const auto result = manager.Load("invalid-metadata.dll", plugin);
 
     EXPECT_FALSE(result.Succeeded());
     EXPECT_EQ(result.Code(), LuAudio::Audio::ResultCode::InvalidArgument);
     EXPECT_EQ(plugin, nullptr);
+}
+
+TEST(PluginManagerTests, RejectsInvalidAbiVersion)
+{
+    auto descriptor = ValidDescriptor;
+    descriptor.abi_version = PluginAbiVersion + 1;
+    ExpectRejected(descriptor);
+}
+
+TEST(PluginManagerTests, RejectsMissingPluginId)
+{
+    auto descriptor = ValidDescriptor;
+    descriptor.id = nullptr;
+
+    ExpectRejected(descriptor);
+}
+
+TEST(PluginManagerTests, RejectsMissingPluginVersion)
+{
+    auto descriptor = ValidDescriptor;
+    descriptor.version = nullptr;
+
+    ExpectRejected(descriptor);
+}
+
+TEST(PluginManagerTests, RejectsMissingParameterMetadata)
+{
+    auto descriptor = ValidDescriptor;
+    descriptor.parameters = nullptr;
+
+    ExpectRejected(descriptor);
+}
+
+TEST(PluginManagerTests, RejectsInvalidParameterMetadata)
+{
+    const PluginParameterDescriptor invalid_parameters[]{
+        {"gain", "Gain", PluginParameterType::Float, 5.0F, 0.0F, 4.0F, 0.01F,
+         "", "", 0, nullptr}};
+    auto descriptor = ValidDescriptor;
+    descriptor.parameters = invalid_parameters;
+
+    ExpectRejected(descriptor);
 }
 
 TEST(PluginManagerTests, LoadsAndProcessesPlugin)

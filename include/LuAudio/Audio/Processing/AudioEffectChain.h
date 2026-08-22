@@ -40,6 +40,12 @@ public:
      */
     bool SetBypassed(EffectId id, bool bypassed) noexcept;
     /**
+     * @summary Sets the processing order for the chain based on a sequence of effect IDs.
+     * @param orderedIds Sequence of effect identifiers in the desired processing order.
+     * @returns True when all effects are present exactly once in the supplied order.
+     */
+    bool SetOrder(std::vector<EffectId> orderedIds) noexcept;
+    /**
      * @summary Processes the buffer through active, non-bypassed effects.
      * @param buffer Buffer to process in place.
      * @returns False when an effect fails; later effects are not called.

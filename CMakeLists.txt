@@ -90,6 +90,7 @@ endif()
 
 target_include_directories(LuAudioCore PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/sdk/include"
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
@@ -287,6 +288,12 @@ if (BUILD_TESTING AND WIN32)
         GTest::gtest_main
     )
     target_compile_features(LuAudioPluginSdkTests PRIVATE cxx_std_20)
+
+    add_executable(LuAudioOrderSensitiveEffectOrderTest
+        "tests/Windows/Plugins/EffectOrderingTest.cpp"
+    )
+    target_link_libraries(LuAudioOrderSensitiveEffectOrderTest PRIVATE LuAudioCore LuAudioWindowsProvider)
+    target_compile_features(LuAudioOrderSensitiveEffectOrderTest PRIVATE cxx_std_20)
 
     add_executable(LuAudioMixerTests
         "tests/Windows/AudioMixerTests.cpp"

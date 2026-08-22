@@ -55,6 +55,42 @@ bool AudioEffectChain::SetBypassed(EffectId id, bool bypassed) noexcept
     return true;
 }
 
+bool AudioEffectChain::SetOrder(std::vector<EffectId> orderedIds) noexcept
+{
+    if (orderedIds.size() != effects_.size()) {
+        return false;
+    }
+
+    std::vector<Entry> reordered;
+    reordered.reserve(effects_.size());
+    std::vector<bool> seen(effects_.size(), false);
+
+    for (const EffectId id : orderedIds) {
+        const auto iterator = std::find_if(
+            effects_.begin(),
+            effects_.end(),
+            [id](const Entry& entry) { return entry.id == id; });
+        if (iterator == effects_.end()) {
+            return false;
+        }
+
+        const std::size_t index = static_cast<std::size_t>(std::distance(effects_.begin(), iterator));
+        if (index >= seen.size() || seen[index]) {
+            return false;
+        }
+
+        seen[index] = true;
+        reordered.push_back(std::move(*iterator));
+    }
+
+    if (std::any_of(seen.begin(), seen.end(), [](bool value) { return !value; })) {
+        return false;
+    }
+
+    effects_ = std::move(reordered);
+    return true;
+}
+
 bool AudioEffectChain::Process(AudioBuffer& buffer) const noexcept
 {
     for (const Entry& entry : effects_) {

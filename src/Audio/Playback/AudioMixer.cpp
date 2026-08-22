@@ -246,6 +246,13 @@ bool AudioMixer::IsSourceFinished(SourceId id) const
     return entry != nullptr && entry->reader->EndOfFile();
 }
 
+std::uint64_t AudioMixer::SourcePosition(SourceId id) const noexcept
+{
+    std::lock_guard lock(mutex_);
+    const Entry* entry = Find(id);
+    return entry == nullptr ? 0 : entry->renderedPosition.load(std::memory_order_acquire);
+}
+
 std::size_t AudioMixer::ActiveSourceCount() const noexcept
 {
     std::lock_guard lock(mutex_);

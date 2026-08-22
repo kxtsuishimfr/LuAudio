@@ -12,6 +12,7 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "tests" / "Audios" / "Output"
 TARGET_NAME = "LuAudioExportAudioTest"
 DEFAULT_WAV_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_1.wav"
 DEFAULT_MP3_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_2.mp3"
+DEFAULT_SAMPLE_3_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_3.mp3"
 
 
 def run(command: list[str], cwd: Path) -> None:
@@ -37,6 +38,13 @@ def main() -> int:
         default=DEFAULT_MP3_FILE,
         help="MP3 input file (default: sample_2.mp3).",
     )
+    parser.add_argument(
+        "sample_3_file",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_SAMPLE_3_FILE,
+        help="Third audio input file (default: sample_3.mp3).",
+    )
     parser.add_argument("output_dir", nargs="?", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--build-dir", type=Path, default=DEFAULT_BUILD_DIR)
     parser.add_argument("--skip-configure", action="store_true")
@@ -45,7 +53,8 @@ def main() -> int:
 
     wav_file = args.wav_file.resolve()
     mp3_file = args.mp3_file.resolve()
-    for audio_file in (wav_file, mp3_file):
+    sample_3_file = args.sample_3_file.resolve()
+    for audio_file in (wav_file, mp3_file, sample_3_file):
         if not audio_file.is_file():
             print(f"Audio file was not found: {audio_file}", file=sys.stderr)
             return 1
@@ -84,7 +93,7 @@ def main() -> int:
         return 1
 
     command = [str(executable)]
-    command.extend([str(wav_file), str(mp3_file), str(output_dir)])
+    command.extend([str(wav_file), str(mp3_file), str(sample_3_file), str(output_dir)])
     run(command, PROJECT_ROOT)
     return 0
 

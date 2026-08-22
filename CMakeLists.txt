@@ -307,6 +307,12 @@ if (BUILD_TESTING AND WIN32)
     target_link_libraries(LuAudioOfflineRenderingTests PRIVATE LuAudioCore GTest::gtest_main)
     target_compile_features(LuAudioOfflineRenderingTests PRIVATE cxx_std_20)
 
+    add_executable(LuAudioOfflineRendererStressTests
+        "tests/Windows/OfflineRendererStressTests.cpp"
+    )
+    target_link_libraries(LuAudioOfflineRendererStressTests PRIVATE LuAudioCore GTest::gtest_main)
+    target_compile_features(LuAudioOfflineRendererStressTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -320,6 +326,7 @@ if (BUILD_TESTING AND WIN32)
     gtest_discover_tests(LuAudioPluginSdkTests)
     gtest_discover_tests(LuAudioMixerTests)
     gtest_discover_tests(LuAudioOfflineRenderingTests)
+    gtest_discover_tests(LuAudioOfflineRendererStressTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"
@@ -340,8 +347,9 @@ if (BUILD_TESTING AND WIN32)
     target_compile_features(LuAudioExportAudioTest PRIVATE cxx_std_20)
     target_compile_definitions(LuAudioExportAudioTest PRIVATE
         LUAUDIO_HALL_REVERB_PLUGIN_PATH="$<TARGET_FILE:LuAudioHallReverbPlugin>"
+        LUAUDIO_BITCRUSHER_PLUGIN_PATH="$<TARGET_FILE:LuAudioBitcrusherPlugin>"
     )
-    add_dependencies(LuAudioExportAudioTest LuAudioHallReverbPlugin)
+    add_dependencies(LuAudioExportAudioTest LuAudioHallReverbPlugin LuAudioBitcrusherPlugin)
 
     add_executable(LuAudioWasapiSeekPlaybackTest
         "tests/Windows/Wasapi/WasapiSeekPlaybackTest.cpp"

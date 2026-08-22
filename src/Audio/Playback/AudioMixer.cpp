@@ -15,14 +15,6 @@ bool FormatsMatch(const AudioFormat& left, const AudioFormat& right)
         left.channelLayout == right.channelLayout;
 }
 
-bool IsSupportedSourceFormat(const AudioFormat& source, const AudioFormat& master)
-{
-    return source.sampleRate == master.sampleRate &&
-        source.sampleType == master.sampleType &&
-        source.channelLayout == master.channelLayout &&
-        (source.channelCount == 1 || source.channelCount == master.channelCount);
-}
-
 }
 
 AudioMixer::AudioMixer(IAudioBackend& backend, std::size_t maxSources)
@@ -122,7 +114,7 @@ Result AudioMixer::AddSource(std::unique_ptr<IAudioReader> reader, SourceId& out
     }
 
     const auto sourceFormat = reader->Format();
-    if (!sourceFormat.IsValid() || !IsSupportedSourceFormat(sourceFormat, masterConfig_.format)) {
+    if (!sourceFormat.IsValid() || !sourceFormat.CanMixInto(masterConfig_.format)) {
         return Result::Failure(ResultCode::InvalidArgument, "Reader format is not supported by the mixer");
     }
 

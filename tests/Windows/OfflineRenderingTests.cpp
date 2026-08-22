@@ -70,6 +70,71 @@ private:
     bool open_ = true;
 };
 
+class VectorSink final : public IAudioSink {
+public:
+    Result Open(const AudioFormat& format) override
+    {
+        format_ = format;
+        open_ = true;
+        return Result::Success();
+    }
+
+    Result Write(const AudioBuffer& buffer) override
+    {
+        if (!open_ || buffer.Format().channelCount != format_.channelCount) {
+            return Result::Failure(ResultCode::InvalidState, "Sink is not open for this format");
+        }
+        samples_.insert(samples_.end(), buffer.Data(), buffer.Data() + buffer.SampleCount());
+        return Result::Success();
+    }
+
+    Result Finalize() override
+    {
+        open_ = false;
+        finalized_ = true;
+        return Result::Success();
+    }
+
+    void Abort() noexcept override
+    {
+        open_ = false;
+        aborted_ = true;
+        samples_.clear();
+    }
+
+    const AudioFormat& Format() const noexcept override { return format_; }
+    bool IsOpen() const noexcept override { return open_; }
+    const std::vector<float>& Samples() const noexcept { return samples_; }
+    bool Finalized() const noexcept { return finalized_; }
+    bool Aborted() const noexcept { return aborted_; }
+
+private:
+    AudioFormat format_;
+    std::vector<float> samples_;
+    bool open_ = false;
+    bool finalized_ = false;
+    bool aborted_ = false;
+};
+
+class MultiplyEffect final : public IAudioEffect {
+public:
+    explicit MultiplyEffect(float multiplier)
+        : multiplier_(multiplier)
+    {
+    }
+
+    bool Process(AudioBuffer& buffer) noexcept override
+    {
+        for (std::size_t index = 0; index < buffer.SampleCount(); ++index) {
+            buffer.Data()[index] *= multiplier_;
+        }
+        return true;
+    }
+
+private:
+    float multiplier_;
+};
+
 std::uint32_t ReadUInt32(const std::vector<std::uint8_t>& bytes, std::size_t offset)
 {
     return static_cast<std::uint32_t>(bytes[offset]) |
@@ -121,6 +186,44 @@ TEST(OfflineRendererTests, RejectsInvalidBlockSizeWithoutOpeningSink)
     EXPECT_EQ(OfflineRenderer::Render(reader, writer, nullptr, 0).Code(), ResultCode::InvalidArgument);
     EXPECT_FALSE(writer.IsOpen());
     EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(OfflineRendererTests, MixesSourcesWithEffectsGainAndLongestDuration)
+{
+    const AudioFormat format{48000, 2};
+    auto first = std::make_unique<VectorReader>(format,
+        std::vector<float>{0.25F, 0.25F, 0.25F, 0.25F, 0.25F, 0.25F});
+    auto second = std::make_unique<VectorReader>(format,
+        std::vector<float>{0.5F, -0.5F, 0.5F, -0.5F});
+
+    auto sourceEffects = std::make_shared<AudioEffectChain>();
+    sourceEffects->Add(std::make_unique<MultiplyEffect>(2.0F));
+    auto masterEffects = std::make_shared<AudioEffectChain>();
+    masterEffects->Add(std::make_unique<MultiplyEffect>(2.0F));
+
+    OfflineRenderer::Source firstSource;
+    firstSource.reader = std::move(first);
+    firstSource.gain = 0.5F;
+    OfflineRenderer::Source secondSource;
+    secondSource.reader = std::move(second);
+    secondSource.effects = sourceEffects;
+
+    VectorSink sink;
+    EXPECT_TRUE(OfflineRenderer::RenderSources(
+        {std::move(firstSource), std::move(secondSource)},
+        format,
+        sink,
+        masterEffects,
+        2).Succeeded());
+
+    ASSERT_TRUE(sink.Finalized());
+    ASSERT_EQ(sink.Samples().size(), 6U);
+    EXPECT_FLOAT_EQ(sink.Samples()[0], 1.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[1], -1.0F / 3.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[2], 1.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[3], -1.0F / 3.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[4], 0.5F);
+    EXPECT_FLOAT_EQ(sink.Samples()[5], 0.5F);
 }
 
 TEST(WavFileWriterTests, RejectsMismatchedBufferFormat)

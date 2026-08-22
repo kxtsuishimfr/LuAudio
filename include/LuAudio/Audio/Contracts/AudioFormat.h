@@ -38,6 +38,14 @@ struct AudioFormat {
      * @returns True when the format is valid.
      */
     bool IsValid() const noexcept;
+
+    /**
+     * @summary Checks whether this format can be mixed into an output format.
+     * @param output Destination mixer format.
+     * @returns True when the formats require no resampling or channel conversion
+     * other than mono expansion.
+     */
+    bool CanMixInto(const AudioFormat& output) const noexcept;
 };
 
 }

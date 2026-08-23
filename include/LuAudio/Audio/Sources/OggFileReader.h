@@ -9,6 +9,7 @@
 #include <LuAudio/Audio/Sources/IAudioReader.h>
 
 #include <condition_variable>
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -61,7 +62,7 @@ private:
     std::thread worker_;
     mutable std::mutex mutex_;
     std::condition_variable condition_;
-    bool stopRequested_ = false;
+    std::atomic<bool> stopRequested_ = false;
 };
 
 }

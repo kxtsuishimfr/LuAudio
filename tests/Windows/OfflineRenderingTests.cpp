@@ -8,6 +8,7 @@
 
 #include <LuAudio/Audio/Rendering/OfflineRenderer.h>
 #include <LuAudio/Audio/Sinks/WavFileWriter.h>
+#include <LuAudio/Audio/Sources/OggFileReader.h>
 
 namespace {
 
@@ -148,6 +149,12 @@ std::filesystem::path TestPath()
     return std::filesystem::temp_directory_path() / "LuAudioOfflineRenderingTest.wav";
 }
 
+std::filesystem::path SampleOggPath()
+{
+    return std::filesystem::path(LUAUDIO_TEST_PROJECT_ROOT) /
+        "tests" / "Audios" / "sample_4.ogg";
+}
+
 }
 
 TEST(OfflineRendererTests, RendersReaderThroughSinkInBlocks)
@@ -173,6 +180,26 @@ TEST(OfflineRendererTests, RendersReaderThroughSinkInBlocks)
     EXPECT_EQ(ReadUInt32(bytes, 40), 12U);
     file.close();
     std::filesystem::remove(path);
+}
+
+TEST(OfflineRendererTests, RendersSampleOggThroughOfflineRenderer)
+{
+    OggFileReader reader(nullptr);
+    ASSERT_TRUE(reader.Open(AudioFile(SampleOggPath().string(), AudioFileType::Ogg)).Succeeded());
+    ASSERT_TRUE(reader.IsOpen());
+    ASSERT_GT(reader.FrameCount(), 0U);
+
+    const auto outputPath = std::filesystem::temp_directory_path() /
+        "LuAudioOfflineRenderingSampleOgg.wav";
+    std::filesystem::remove(outputPath);
+    WavFileWriter writer(outputPath.string());
+
+    const Result result = OfflineRenderer::Render(reader, writer, nullptr, 4096);
+    EXPECT_TRUE(result.Succeeded()) << result.Message();
+    EXPECT_FALSE(writer.IsOpen());
+    EXPECT_TRUE(std::filesystem::exists(outputPath));
+    EXPECT_GT(std::filesystem::file_size(outputPath), 44U);
+    std::filesystem::remove(outputPath);
 }
 
 TEST(OfflineRendererTests, RejectsInvalidBlockSizeWithoutOpeningSink)
@@ -223,11 +250,11 @@ TEST(OfflineRendererTests, MixesSourcesWithEffectsGainAndLongestDuration)
     ASSERT_TRUE(sink.Finalized());
     ASSERT_EQ(sink.Samples().size(), 6U);
     EXPECT_FLOAT_EQ(sink.Samples()[0], 1.0F);
-    EXPECT_FLOAT_EQ(sink.Samples()[1], -1.0F / 3.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[1], -7.0F / 9.0F);
     EXPECT_FLOAT_EQ(sink.Samples()[2], 1.0F);
-    EXPECT_FLOAT_EQ(sink.Samples()[3], -1.0F / 3.0F);
-    EXPECT_FLOAT_EQ(sink.Samples()[4], 0.5F);
-    EXPECT_FLOAT_EQ(sink.Samples()[5], 0.5F);
+    EXPECT_FLOAT_EQ(sink.Samples()[3], -7.0F / 9.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[4], 0.25F);
+    EXPECT_FLOAT_EQ(sink.Samples()[5], 0.25F);
 }
 
 TEST(WavFileWriterTests, RejectsMismatchedBufferFormat)

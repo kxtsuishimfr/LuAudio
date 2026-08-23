@@ -1,6 +1,5 @@
 #include <conio.h>
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -8,7 +7,6 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <vector>
 
 #include <LuAudio/LuAudio.h>
 
@@ -16,55 +14,6 @@ namespace {
 
 using namespace LuAudio;
 using namespace LuAudio::Audio;
-
-Result OpenAudio(const std::filesystem::path& path, std::unique_ptr<IAudioReader>& reader)
-{
-    if (path.extension() == ".wav" || path.extension() == ".WAV") {
-        auto wavReader = std::make_unique<WavFileReader>();
-        const auto result = wavReader->Open(AudioFile(path.string(), AudioFileType::Wav));
-        if (result.Succeeded()) {
-            reader = std::move(wavReader);
-        }
-        return result;
-    }
-
-    auto mp3Reader = std::make_unique<Mp3FileReader>(
-        std::make_unique<Providers::Windows::WAudioDecoder>());
-    const auto result = mp3Reader->Open(AudioFile(path.string(), AudioFileType::Mp3));
-    if (result.Succeeded()) {
-        reader = std::move(mp3Reader);
-    }
-    return result;
-}
-
-Result CreateHallChain(
-    const std::filesystem::path& pluginPath,
-    const AudioFormat& format,
-    AudioEffectChain& chain)
-{
-    Providers::Windows::WPluginProvider provider;
-    Plugins::PluginManager manager(provider);
-    std::unique_ptr<Plugins::PluginHandle> plugin;
-    const auto loadResult = manager.Load(pluginPath, plugin);
-    if (!loadResult.Succeeded()) {
-        return loadResult;
-    }
-
-    auto effect = std::make_unique<Plugins::PluginEffectAdapter>(
-        std::move(plugin),
-        Plugins::PluginInstanceConfig{format.sampleRate, format.channelCount, 4096});
-    if (!effect->IsReady()) {
-        return Result::Failure(ResultCode::ProcessingFailed, "Hall reverb plugin failed to initialize");
-    }
-    if (!effect->SetParameter("room_size", 0.92F) ||
-        !effect->SetParameter("damping", 0.28F) ||
-        !effect->SetParameter("wet", 0.31F) ||
-        !effect->SetParameter("width", 0.9F)) {
-        return Result::Failure(ResultCode::ProcessingFailed, "Unable to configure hall reverb plugin");
-    }
-    chain.Add(std::move(effect));
-    return Result::Success();
-}
 
 Result CreateBitcrusherChain(
     const std::filesystem::path& pluginPath,
@@ -107,24 +56,12 @@ void PrintResult(const char* operation, const Result& result)
 
 int main(int argc, char* argv[])
 {
-    const auto wavPath = argc > 1
+    const auto inputPath = argc > 1
         ? std::filesystem::path(argv[1])
-        : std::filesystem::path("tests/Audios/sample_1.wav");
-    const auto mp3Path = argc > 2
+        : std::filesystem::path("tests/Audios/sample_4.ogg");
+    const auto outputDirectory = argc > 2
         ? std::filesystem::path(argv[2])
-        : std::filesystem::path("tests/Audios/sample_2.mp3");
-    const auto sample3Path = argc > 3
-        ? std::filesystem::path(argv[3])
-        : std::filesystem::path("tests/Audios/sample_3.mp3");
-    const auto outputDirectory = argc > 4
-        ? std::filesystem::path(argv[4])
         : std::filesystem::path("tests/Audios/Output");
-#if defined(LUAUDIO_HALL_REVERB_PLUGIN_PATH)
-    const std::filesystem::path hallPluginPath = LUAUDIO_HALL_REVERB_PLUGIN_PATH;
-#else
-    std::cerr << "Hall reverb plugin path was not configured\n";
-    return 1;
-#endif
 #if defined(LUAUDIO_BITCRUSHER_PLUGIN_PATH)
     const std::filesystem::path bitcrusherPluginPath = LUAUDIO_BITCRUSHER_PLUGIN_PATH;
 #else
@@ -132,61 +69,40 @@ int main(int argc, char* argv[])
     return 1;
 #endif
 
-    std::unique_ptr<IAudioReader> wavReader;
-    std::unique_ptr<IAudioReader> mp3Reader;
-    std::unique_ptr<IAudioReader> sample3Reader;
-    const auto wavOpen = OpenAudio(wavPath, wavReader);
-    const auto mp3Open = OpenAudio(mp3Path, mp3Reader);
-    const auto sample3Open = OpenAudio(sample3Path, sample3Reader);
-    if (!wavOpen.Succeeded() || !mp3Open.Succeeded() || !sample3Open.Succeeded()) {
-        PrintResult("WAV open", wavOpen);
-        PrintResult("MP3 open", mp3Open);
-        PrintResult("Sample 3 open", sample3Open);
-        return 1;
-    }
-    if (!wavReader->Format().CanMixInto(wavReader->Format()) ||
-        !mp3Reader->Format().CanMixInto(wavReader->Format()) ||
-        !sample3Reader->Format().CanMixInto(wavReader->Format())) {
-        std::cerr << "The three sources must have compatible mixer formats\n";
-        return 1;
-    }
-    const auto sampleRate = wavReader->Format().sampleRate;
-
-    auto bitcrusherEffects = std::make_shared<AudioEffectChain>();
-    auto hallEffects = std::make_shared<AudioEffectChain>();
-    const auto bitcrusherResult = CreateBitcrusherChain(
-        bitcrusherPluginPath, wavReader->Format(), *bitcrusherEffects);
-    const auto hallResult = CreateHallChain(
-        hallPluginPath, sample3Reader->Format(), *hallEffects);
-    if (!bitcrusherResult.Succeeded() || !hallResult.Succeeded()) {
-        PrintResult("Bitcrusher setup", bitcrusherResult);
-        PrintResult("Hall reverb setup", hallResult);
-        return 1;
-    }
-
     Providers::Windows::Wasapi::WasapiBackend backend;
-    AudioMixer mixer(backend, 3);
-    const auto mixerOpen = mixer.Open(AudioStreamConfig{wavReader->Format(), 512, false});
+    AudioMixer mixer(backend, 1);
+    auto playbackReader = std::make_unique<OggFileReader>(nullptr);
+    const auto playbackOpen = playbackReader->Open(
+        AudioFile(inputPath.string(), AudioFileType::Ogg));
+    if (!playbackOpen.Succeeded()) {
+        PrintResult("Playback Ogg open", playbackOpen);
+        mixer.Close();
+        return 1;
+    }
+    const AudioFormat playbackFormat = playbackReader->Format();
+    const auto mixerOpen = mixer.Open(AudioStreamConfig{playbackFormat, 512, false});
     if (!mixerOpen.Succeeded()) {
         PrintResult("WASAPI mixer open", mixerOpen);
         return 1;
     }
-    AudioMixer::SourceId wavId = 0;
-    AudioMixer::SourceId mp3Id = 0;
-    AudioMixer::SourceId sample3Id = 0;
-    const auto addWavResult = mixer.AddSource(std::move(wavReader), wavId);
-    const auto addMp3Result = mixer.AddSource(std::move(mp3Reader), mp3Id);
-    const auto addSample3Result = mixer.AddSource(std::move(sample3Reader), sample3Id);
-    if (!addWavResult.Succeeded() || !addMp3Result.Succeeded() ||
-        !addSample3Result.Succeeded()) {
-        PrintResult("WAV source add", addWavResult);
-        PrintResult("MP3 source add", addMp3Result);
-        PrintResult("Sample 3 source add", addSample3Result);
+    AudioMixer::SourceId sourceId = 0;
+    const auto addSourceResult = mixer.AddSource(std::move(playbackReader), sourceId);
+    if (!addSourceResult.Succeeded()) {
+        PrintResult("Ogg source add", addSourceResult);
         mixer.Close();
         return 1;
     }
-    PrintResult("Bitcrusher source setup", mixer.SetSourceEffects(wavId, bitcrusherEffects));
-    PrintResult("Hall reverb source setup", mixer.SetSourceEffects(sample3Id, hallEffects));
+
+    auto effects = std::make_shared<AudioEffectChain>();
+    const auto effectsResult = CreateBitcrusherChain(
+        bitcrusherPluginPath, playbackFormat, *effects);
+    if (!effectsResult.Succeeded()) {
+        PrintResult("Bitcrusher setup", effectsResult);
+        mixer.Close();
+        return 1;
+    }
+    PrintResult("Bitcrusher source setup", mixer.SetSourceEffects(sourceId, effects));
+
     const auto startResult = mixer.Start();
     if (!startResult.Succeeded()) {
         PrintResult("WASAPI mixer start", startResult);
@@ -195,10 +111,9 @@ int main(int argc, char* argv[])
     }
 
     std::filesystem::create_directories(outputDirectory);
-    const auto outputPath = outputDirectory / "sample_1_bitcrusher_plus_sample_2_plus_sample_3_hall.wav";
+    const auto outputPath = outputDirectory / "sample_4_bitcrusher.ogg";
     std::atomic<bool> exportRunning = false;
     std::thread exportThread;
-
     const auto joinExport = [&] {
         if (exportThread.joinable()) {
             std::cout << "Waiting for export thread to finish...\n";
@@ -207,18 +122,15 @@ int main(int argc, char* argv[])
         }
     };
 
-    std::cout << "Playing " << wavPath << ", " << mp3Path << " and " << sample3Path
-              << " through WASAPI.\n"
-              << "Space: pause/resume all sources\n"
-              << "Left/Right: seek all sources by 5 seconds\n"
-              << "R: export processed mix to " << outputPath << "\n"
+    std::cout << "Playing " << inputPath << " through WASAPI.\n"
+              << "Space: pause/resume source\n"
+              << "Left/Right: seek source by 5 seconds\n"
+              << "R: export processed Ogg to " << outputPath << "\n"
               << "Q: quit\n";
 
     bool quit = false;
     bool paused = false;
-    while (!quit && mixer.ActiveSourceCount() != 0 &&
-        !(mixer.IsSourceFinished(wavId) && mixer.IsSourceFinished(mp3Id) &&
-            mixer.IsSourceFinished(sample3Id))) {
+    while (!quit && mixer.ActiveSourceCount() != 0 && !mixer.IsSourceFinished(sourceId)) {
         if (!_kbhit()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(25));
             continue;
@@ -228,20 +140,14 @@ int main(int argc, char* argv[])
             quit = true;
         } else if (key == ' ') {
             paused = !paused;
-            PrintResult(paused ? "Pause all sources" : "Resume all sources",
-                mixer.SetSourcePaused(wavId, paused));
-            PrintResult(paused ? "Pause sample 2" : "Resume sample 2",
-                mixer.SetSourcePaused(mp3Id, paused));
-            PrintResult(paused ? "Pause sample 3" : "Resume sample 3",
-                mixer.SetSourcePaused(sample3Id, paused));
+            PrintResult(paused ? "Pause source" : "Resume source",
+                mixer.SetSourcePaused(sourceId, paused));
         } else if (key == 0 || key == 0xE0) {
             const int arrow = _getch();
             if (arrow == 75 || arrow == 77) {
-                const auto seconds = static_cast<std::int64_t>(sampleRate) * 5;
+                const auto seconds = static_cast<std::int64_t>(playbackFormat.sampleRate) * 5;
                 const auto seek = arrow == 75 ? -seconds : seconds;
-                PrintResult("Seek WAV", mixer.SeekSourceRelative(wavId, seek));
-                PrintResult("Seek MP3", mixer.SeekSourceRelative(mp3Id, seek));
-                PrintResult("Seek sample 3", mixer.SeekSourceRelative(sample3Id, seek));
+                PrintResult("Seek Ogg", mixer.SeekSourceRelative(sourceId, seek));
             }
         } else if (key == 'r' || key == 'R') {
             if (exportRunning.exchange(true)) {
@@ -250,50 +156,26 @@ int main(int argc, char* argv[])
             }
             joinExport();
             exportThread = std::thread([&, outputPath] {
-                std::unique_ptr<IAudioReader> exportWav;
-                std::unique_ptr<IAudioReader> exportMp3;
-                std::unique_ptr<IAudioReader> exportSample3;
-                const auto exportWavResult = OpenAudio(wavPath, exportWav);
-                const auto exportMp3Result = OpenAudio(mp3Path, exportMp3);
-                const auto exportSample3Result = OpenAudio(sample3Path, exportSample3);
-                if (!exportWavResult.Succeeded() || !exportMp3Result.Succeeded() ||
-                    !exportSample3Result.Succeeded()) {
-                    PrintResult("Export WAV open", exportWavResult);
-                    PrintResult("Export MP3 open", exportMp3Result);
-                    PrintResult("Export sample 3 open", exportSample3Result);
+                auto exportReader = std::make_unique<OggFileReader>(nullptr);
+                const auto exportOpen = exportReader->Open(
+                    AudioFile(inputPath.string(), AudioFileType::Ogg));
+                if (!exportOpen.Succeeded()) {
+                    PrintResult("Export Ogg open", exportOpen);
                     exportRunning = false;
                     return;
                 }
-                auto exportBitcrusherEffects = std::make_shared<AudioEffectChain>();
-                auto exportHallEffects = std::make_shared<AudioEffectChain>();
-                const auto exportBitcrusherResult = CreateBitcrusherChain(
-                    bitcrusherPluginPath, exportWav->Format(), *exportBitcrusherEffects);
-                const auto exportHallResult = CreateHallChain(
-                    hallPluginPath, exportSample3->Format(), *exportHallEffects);
-                if (!exportBitcrusherResult.Succeeded() || !exportHallResult.Succeeded()) {
-                    PrintResult("Export bitcrusher setup", exportBitcrusherResult);
-                    PrintResult("Export hall reverb setup", exportHallResult);
+                auto exportEffects = std::make_shared<AudioEffectChain>();
+                const auto exportEffectsResult = CreateBitcrusherChain(
+                    bitcrusherPluginPath, exportReader->Format(), *exportEffects);
+                if (!exportEffectsResult.Succeeded()) {
+                    PrintResult("Export bitcrusher setup", exportEffectsResult);
                     exportRunning = false;
                     return;
                 }
-                const auto exportFormat = exportWav->Format();
-                std::vector<OfflineRenderer::Source> sources;
-                sources.reserve(3);
-                OfflineRenderer::Source wavSource;
-                wavSource.reader = std::move(exportWav);
-                wavSource.effects = exportBitcrusherEffects;
-                sources.push_back(std::move(wavSource));
-                OfflineRenderer::Source mp3Source;
-                mp3Source.reader = std::move(exportMp3);
-                sources.push_back(std::move(mp3Source));
-                OfflineRenderer::Source sample3Source;
-                sample3Source.reader = std::move(exportSample3);
-                sample3Source.effects = exportHallEffects;
-                sources.push_back(std::move(sample3Source));
-                WavFileWriter writer(outputPath.string());
-                const auto renderResult = OfflineRenderer::RenderSources(
-                    std::move(sources), exportFormat, writer, nullptr, 4096);
-                PrintResult("Offline export", renderResult);
+                OggFileWriter writer(outputPath.string());
+                const auto renderResult = OfflineRenderer::Render(
+                    *exportReader, writer, exportEffects.get(), 4096);
+                PrintResult("Offline Ogg export", renderResult);
                 if (renderResult.Succeeded()) {
                     std::cout << "Export finished: " << outputPath << '\n';
                 }

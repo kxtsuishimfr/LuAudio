@@ -238,6 +238,7 @@ if (ANDROID)
 endif()
 
 if (BUILD_TESTING AND WIN32)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" LUAUDIO_TEST_PROJECT_ROOT)
     include(FetchContent)
 
     FetchContent_Declare(
@@ -322,6 +323,9 @@ if (BUILD_TESTING AND WIN32)
     )
     target_link_libraries(LuAudioOfflineRenderingTests PRIVATE LuAudioCore GTest::gtest_main)
     target_compile_features(LuAudioOfflineRenderingTests PRIVATE cxx_std_20)
+    target_compile_definitions(LuAudioOfflineRenderingTests PRIVATE
+        LUAUDIO_TEST_PROJECT_ROOT="${LUAUDIO_TEST_PROJECT_ROOT}"
+    )
 
     add_executable(LuAudioOfflineRendererStressTests
         "tests/Windows/OfflineRendererStressTests.cpp"

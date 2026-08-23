@@ -45,26 +45,37 @@ struct OggFileWriter::Impl {
     bool commentInitialized = false;
     bool streamInitialized = false;
 
-    ~Impl()
+    void Reset() noexcept
     {
-        if (blockInitialized) {
-            vorbis_block_clear(&block);
-        }
-        if (dspInitialized) {
-            vorbis_dsp_clear(&dsp);
-        }
-        if (commentInitialized) {
-            vorbis_comment_clear(&comment);
-        }
-        if (infoInitialized) {
-            vorbis_info_clear(&info);
+        if (file != nullptr) {
+            std::fclose(file);
+            file = nullptr;
         }
         if (streamInitialized) {
             ogg_stream_clear(&stream);
+            streamInitialized = false;
         }
-        if (file != nullptr) {
-            std::fclose(file);
+        if (blockInitialized) {
+            vorbis_block_clear(&block);
+            blockInitialized = false;
         }
+        if (dspInitialized) {
+            vorbis_dsp_clear(&dsp);
+            dspInitialized = false;
+        }
+        if (commentInitialized) {
+            vorbis_comment_clear(&comment);
+            commentInitialized = false;
+        }
+        if (infoInitialized) {
+            vorbis_info_clear(&info);
+            infoInitialized = false;
+        }
+    }
+
+    ~Impl()
+    {
+        Reset();
     }
 };
 
@@ -95,6 +106,8 @@ Result OggFileWriter::Open(const AudioFormat& format)
     if (impl_->file == nullptr) {
         return ProcessingFailure("Unable to open Ogg output file");
     }
+    open_ = true;
+    finalized_ = false;
 
     vorbis_info_init(&impl_->info);
     impl_->infoInitialized = true;
@@ -126,13 +139,17 @@ Result OggFileWriter::Open(const AudioFormat& format)
     }
     impl_->streamInitialized = true;
 
-    ogg_packet packet;
-    if (vorbis_analysis_headerout(&impl_->dsp, &impl_->comment, &packet,
-            nullptr, nullptr) != 0) {
+    ogg_packet header;
+    ogg_packet comment;
+    ogg_packet codebook;
+    if (vorbis_analysis_headerout(&impl_->dsp, &impl_->comment, &header,
+            &comment, &codebook) != 0) {
         Abort();
         return ProcessingFailure("Unable to create Ogg Vorbis headers");
     }
-    ogg_stream_packetin(&impl_->stream, &packet);
+    ogg_stream_packetin(&impl_->stream, &header);
+    ogg_stream_packetin(&impl_->stream, &comment);
+    ogg_stream_packetin(&impl_->stream, &codebook);
     ogg_page page;
     while (ogg_stream_flush(&impl_->stream, &page) != 0) {
         if (!WritePage(impl_->file, page)) {
@@ -142,8 +159,6 @@ Result OggFileWriter::Open(const AudioFormat& format)
     }
 
     format_ = format;
-    open_ = true;
-    finalized_ = false;
     return Result::Success();
 }
 
@@ -227,6 +242,7 @@ Result OggFileWriter::Finalize()
     }
     std::fclose(impl_->file);
     impl_->file = nullptr;
+    impl_->Reset();
     open_ = false;
     finalized_ = true;
     return Result::Success();
@@ -234,11 +250,11 @@ Result OggFileWriter::Finalize()
 
 void OggFileWriter::Abort() noexcept
 {
-    if (impl_ != nullptr && impl_->file != nullptr) {
-        std::fclose(impl_->file);
-        impl_->file = nullptr;
+    const bool wasOpen = open_;
+    if (impl_ != nullptr) {
+        impl_->Reset();
     }
-    if (open_ && !path_.empty()) {
+    if (wasOpen && !path_.empty()) {
         std::remove(path_.c_str());
     }
     open_ = false;

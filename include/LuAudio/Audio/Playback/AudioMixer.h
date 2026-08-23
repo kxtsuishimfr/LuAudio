@@ -61,7 +61,7 @@ public:
     Result SetSourcePaused(SourceId id, bool paused);
     /** @summary Checks whether a source has reached EOF. */
     bool IsSourceFinished(SourceId id) const;
-    /** @summary Gets the last source frame rendered by the mixer. */
+    /** @summary Gets the last applied source frame, including successful seeks while paused. */
     std::uint64_t SourcePosition(SourceId id) const noexcept;
 
     /** @summary Publishes an immutable effect-chain snapshot for a source. */

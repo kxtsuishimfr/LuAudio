@@ -208,9 +208,13 @@ TEST(OfflineRendererTests, MixesSourcesWithEffectsGainAndLongestDuration)
     secondSource.reader = std::move(second);
     secondSource.effects = sourceEffects;
 
+    std::vector<OfflineRenderer::Source> sources;
+    sources.push_back(std::move(firstSource));
+    sources.push_back(std::move(secondSource));
+
     VectorSink sink;
     EXPECT_TRUE(OfflineRenderer::RenderSources(
-        {std::move(firstSource), std::move(secondSource)},
+        std::move(sources),
         format,
         sink,
         masterEffects,

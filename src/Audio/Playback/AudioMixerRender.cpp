@@ -46,6 +46,13 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
 
     for (const auto& sourceSnapshot : sources) {
         const auto& source = sourceSnapshot.entry;
+        if (sourceSnapshot.seekPending) {
+            if (!source->reader->Seek(sourceSnapshot.pendingSeekFrame).Succeeded()) {
+                continue;
+            }
+            source->renderedPosition.store(source->reader->Position(), std::memory_order_release);
+        }
+
         if (sourceSnapshot.paused) {
             continue;
         }
@@ -53,12 +60,6 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
         source->sourceScratch.Resize(frameCount);
         source->masterScratch.Resize(frameCount);
         source->masterScratch.Clear();
-
-        if (sourceSnapshot.seekPending) {
-            if (!source->reader->Seek(sourceSnapshot.pendingSeekFrame).Succeeded()) {
-                continue;
-            }
-        }
 
         if (!source->reader->Read(source->sourceScratch).Succeeded()) {
             continue;

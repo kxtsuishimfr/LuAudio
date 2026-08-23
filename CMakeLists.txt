@@ -13,6 +13,13 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LuAudioPlugin.cmake")
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build vendored audio libraries as static libraries" FORCE)
+set(INSTALL_DOCS OFF CACHE BOOL "Disable vendored audio library documentation" FORCE)
+set(INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "Disable vendored pkg-config files" FORCE)
+set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "Disable vendored CMake package files" FORCE)
+add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Ogg" "${CMAKE_CURRENT_BINARY_DIR}/ogg-build" EXCLUDE_FROM_ALL)
+add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Vorbis" "${CMAKE_CURRENT_BINARY_DIR}/vorbis-build" EXCLUDE_FROM_ALL)
+
 option(LUAUDIO_ANDROID_TESTS "Build the Android test runner" OFF)
 set(LUAUDIO_ANDROID_TEST_SOURCE
     "${PROJECT_SOURCE_DIR}/tests/Android/app/src/main/cpp/AndroidTestMain.cpp"
@@ -49,9 +56,11 @@ set(LUAUDIO_CORE_SOURCES
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Processing/AudioEffectChain.cpp"
+    "src/Audio/Sinks/OggFileWriter.cpp"
     "src/Audio/Sinks/WavFileWriter.cpp"
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/Mp3FileReader.cpp"
+    "src/Audio/Sources/OggFileReader.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
     "src/Utils/Diagnostics/Log.cpp"
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
@@ -64,10 +73,12 @@ set(LUAUDIO_CORE_SOURCES
     "include/LuAudio/Audio/Rendering/OfflineRenderer.h"
     "include/LuAudio/Audio/Processing/AudioBuffer.h"
     "include/LuAudio/Audio/Processing/AudioEffectChain.h"
+    "include/LuAudio/Audio/Sinks/OggFileWriter.h"
     "include/LuAudio/Audio/Sinks/WavFileWriter.h"
     "include/LuAudio/Audio/Contracts/IAudioEffect.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/Mp3FileReader.h"
+    "include/LuAudio/Audio/Sources/OggFileReader.h"
     "include/LuAudio/Audio/Sources/WavFileReader.h"
     "include/LuAudio/Audio/Sources/IAudioReader.h"
     "include/LuAudio/Audio/Contracts/IAudioDecoder.h"
@@ -91,6 +102,11 @@ endif()
 target_include_directories(LuAudioCore PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/sdk/include"
+)
+target_link_libraries(LuAudioCore PRIVATE
+    Vorbis::vorbis
+    Vorbis::vorbisenc
+    Vorbis::vorbisfile
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
@@ -313,6 +329,15 @@ if (BUILD_TESTING AND WIN32)
     target_link_libraries(LuAudioOfflineRendererStressTests PRIVATE LuAudioCore GTest::gtest_main)
     target_compile_features(LuAudioOfflineRendererStressTests PRIVATE cxx_std_20)
 
+    add_executable(LuAudioOggFileReaderStressTests
+        "tests/Windows/OggFileReaderStressTests.cpp"
+    )
+    target_link_libraries(LuAudioOggFileReaderStressTests PRIVATE
+        LuAudioCore
+        GTest::gtest_main
+    )
+    target_compile_features(LuAudioOggFileReaderStressTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -327,6 +352,7 @@ if (BUILD_TESTING AND WIN32)
     gtest_discover_tests(LuAudioMixerTests)
     gtest_discover_tests(LuAudioOfflineRenderingTests)
     gtest_discover_tests(LuAudioOfflineRendererStressTests)
+    gtest_discover_tests(LuAudioOggFileReaderStressTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"

@@ -11,7 +11,9 @@ enum class AudioFileType {
     /** @summary RIFF/WAVE audio file. */
     Wav,
     /** @summary MPEG Layer III audio file. */
-    Mp3
+    Mp3,
+    /** @summary Ogg container with a currently supported audio codec. */
+    Ogg
 };
 
 /**

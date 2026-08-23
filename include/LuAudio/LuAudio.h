@@ -46,10 +46,12 @@
 #include <LuAudio/Audio/Processing/AudioBuffer.h>
 #include <LuAudio/Audio/Processing/AudioEffectChain.h>
 #include <LuAudio/Audio/Rendering/OfflineRenderer.h>
+#include <LuAudio/Audio/Sinks/OggFileWriter.h>
 #include <LuAudio/Audio/Sinks/WavFileWriter.h>
 #include <LuAudio/Audio/Sources/AudioFile.h>
 #include <LuAudio/Audio/Sources/IAudioReader.h>
 #include <LuAudio/Audio/Sources/Mp3FileReader.h>
+#include <LuAudio/Audio/Sources/OggFileReader.h>
 #include <LuAudio/Audio/Sources/WavFileReader.h>
 #include <LuAudio/Plugins/Contracts/PluginAbi.h>
 #include <LuAudio/Plugins/PluginEffectAdapter.h>

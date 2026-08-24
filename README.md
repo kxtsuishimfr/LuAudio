@@ -13,3 +13,8 @@ It also has support for chaining effects, plugins, and much more things
 
 LuAudio has been put through many stress-tests across all supported platforms to ensure stable usage.
 Though, if you find any issues with it feel free to open an issue :D
+
+## Where is documentation at?
+
+Currently, LuAudio does not have a website for documentation. Though, you can read the header files for it, all the functions
+are neatly documented for anyone who wants to read them.

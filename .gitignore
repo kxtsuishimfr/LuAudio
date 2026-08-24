@@ -9,3 +9,6 @@ private/
 
 # Android build output
 tests/Android/
+
+# Test audio files
+tests/Audios/*

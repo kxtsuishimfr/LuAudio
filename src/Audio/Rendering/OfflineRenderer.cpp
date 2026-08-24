@@ -37,6 +37,17 @@ bool HasOnlyFiniteSamples(const AudioBuffer& buffer) noexcept
     return true;
 }
 
+const OfflineRenderer::Source::ControlBinding* FindBinding(
+    const OfflineRenderer::Source& source,
+    Automation::TargetHandle target) noexcept
+{
+    const auto iterator = std::find_if(
+        source.controlBindings.begin(),
+        source.controlBindings.end(),
+        [target](const auto& binding) { return binding.target == target; });
+    return iterator == source.controlBindings.end() ? nullptr : &*iterator;
+}
+
 }
 
 Result OfflineRenderer::Render(
@@ -211,8 +222,36 @@ Result OfflineRenderer::RenderSources(
                 return Result::Failure(ResultCode::ProcessingFailed,
                     "Offline source effect produced a non-finite sample");
             }
-            for (std::size_t sample = 0; sample < remapped.SampleCount(); ++sample) {
-                master.Data()[sample] += remapped.Data()[sample] * source.gain;
+
+            std::vector<Automation::ControlEvent> controls;
+            if (source.controls) {
+                controls.resize(std::max<std::size_t>(
+                    source.controls->Size(),
+                    1) * (frameCount + 1));
+                controls.resize(source.controls->EvaluateBlock(
+                    renderedFrames,
+                    static_cast<std::uint32_t>(framesRead),
+                    controls.data(),
+                    controls.size()));
+            }
+
+            std::size_t controlIndex = 0;
+            for (std::size_t frame = 0; frame < framesRead; ++frame) {
+                while (controlIndex < controls.size() &&
+                    controls[controlIndex].frameOffset <= frame) {
+                    const auto* binding = FindBinding(source, controls[controlIndex].target);
+                    if (binding != nullptr) {
+                        binding->control->Apply(
+                            controls[controlIndex].frameOffset,
+                            controls[controlIndex].value);
+                    }
+                    ++controlIndex;
+                }
+
+                for (std::size_t channel = 0; channel < outputFormat.channelCount; ++channel) {
+                    const std::size_t sample = frame * outputFormat.channelCount + channel;
+                    master.Data()[sample] += remapped.Data()[sample] * source.gain;
+                }
             }
         }
 

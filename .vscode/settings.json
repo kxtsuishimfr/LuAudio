@@ -3,5 +3,12 @@
         "tests/Android/app/src/main/java"
     ],
     "java.project.outputPath": "tests/Android/app/build/vscode-java",
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "python-envs.pythonProjects": [
+        {
+            "path": ".",
+            "envManager": "ms-python.python:system",
+            "packageManager": "ms-python.python:pip"
+        }
+    ]
 }

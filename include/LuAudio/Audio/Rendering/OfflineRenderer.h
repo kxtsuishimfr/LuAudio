@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <LuAudio/Audio/Contracts/IAudioSink.h>
+#include <LuAudio/Audio/Contracts/Automation.h>
 #include <LuAudio/Audio/Contracts/Result.h>
 #include <LuAudio/Audio/Processing/AudioEffectChain.h>
 #include <LuAudio/Audio/Sources/IAudioReader.h>
@@ -17,8 +18,15 @@ namespace LuAudio::Audio {
 class OfflineRenderer {
 public:
     struct Source {
+        struct ControlBinding {
+            Automation::TargetHandle target;
+            std::shared_ptr<Automation::IControlTarget> control;
+        };
+
         std::unique_ptr<IAudioReader> reader;
         std::shared_ptr<const AudioEffectChain> effects;
+        std::shared_ptr<const Automation::IAutomationSet> controls;
+        std::vector<ControlBinding> controlBindings;
         float gain = 1.0F;
     };
 

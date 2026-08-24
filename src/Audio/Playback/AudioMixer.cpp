@@ -5,6 +5,8 @@
 
 namespace LuAudio::Audio {
 
+thread_local AudioMixer* AudioMixer::activeRenderMixer_ = nullptr;
+
 namespace {
 
 bool FormatsMatch(const AudioFormat& left, const AudioFormat& right)
@@ -97,6 +99,7 @@ void AudioMixer::Close() noexcept
         std::lock_guard lock(mutex_);
         detachedSources.swap(sources_);
         retiredSources_.clear();
+        controlBindings_.clear();
         detachedMasterEffects = std::move(masterEffects_);
         open_ = false;
         masterConfig_ = {};
@@ -217,6 +220,65 @@ Result AudioMixer::SetSourceGain(SourceId id, float gain)
         return Result::Failure(ResultCode::InvalidArgument, "Audio mixer source was not found");
     }
     entry->gain = gain;
+    return Result::Success();
+}
+
+Result AudioMixer::BindControl(
+    Automation::TargetHandle target,
+    SourceId source,
+    std::shared_ptr<Automation::IControlTarget> controlTarget)
+{
+    if (target == 0 || !controlTarget) {
+        return Result::Failure(ResultCode::InvalidArgument, "Audio mixer control target must be non-zero");
+    }
+
+    std::lock_guard lock(mutex_);
+    if (Find(source) == nullptr) {
+        return Result::Failure(ResultCode::InvalidArgument, "Audio mixer source was not found");
+    }
+    controlBindings_[target] = {source, std::move(controlTarget)};
+    return Result::Success();
+}
+
+Result AudioMixer::SubmitControls(const Automation::ControlBlock& block)
+{
+    if (activeRenderMixer_ == this) {
+        return Result::Failure(ResultCode::InvalidState, "Audio mixer controls cannot be submitted from the render callback");
+    }
+    if (block.frameCount == 0 || block.eventCount == 0 || block.events == nullptr) {
+        return Result::Failure(ResultCode::InvalidArgument, "Audio mixer control block is empty");
+    }
+
+    std::unordered_map<SourceId, std::vector<Entry::ControlEvent>> schedules;
+    std::lock_guard lock(mutex_);
+    for (std::size_t index = 0; index < block.eventCount; ++index) {
+        const auto& event = block.events[index];
+        if (event.frameOffset >= block.frameCount) {
+            return Result::Failure(ResultCode::InvalidArgument, "Audio mixer control event is outside its block");
+        }
+        const auto binding = controlBindings_.find(event.target);
+        if (binding == controlBindings_.end()) {
+            return Result::Failure(ResultCode::InvalidArgument, "Audio mixer control target was not bound");
+        }
+        if (!std::isfinite(event.value)) {
+            return Result::Failure(ResultCode::InvalidArgument, "Audio mixer control value must be finite");
+        }
+        schedules[binding->second.source].push_back({
+            event.frameOffset,
+            binding->second.target,
+            event.value});
+    }
+
+    for (auto& [sourceId, events] : schedules) {
+        Entry* entry = Find(sourceId);
+        if (entry == nullptr) {
+            return Result::Failure(ResultCode::InvalidArgument, "Audio mixer source was not found");
+        }
+        std::sort(events.begin(), events.end(), [](const auto& left, const auto& right) {
+            return left.frameOffset < right.frameOffset;
+        });
+        entry->controls = std::make_shared<const std::vector<Entry::ControlEvent>>(std::move(events));
+    }
     return Result::Success();
 }
 

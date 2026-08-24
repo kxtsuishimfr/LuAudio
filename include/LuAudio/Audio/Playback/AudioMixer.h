@@ -4,9 +4,11 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include <LuAudio/Audio/Contracts/IAudioBackend.h>
+#include <LuAudio/Audio/Contracts/Automation.h>
 #include <LuAudio/Audio/Contracts/Result.h>
 #include <LuAudio/Audio/Processing/AudioBuffer.h>
 #include <LuAudio/Audio/Processing/AudioEffectChain.h>
@@ -57,6 +59,16 @@ public:
     Result SeekSourceRelative(SourceId id, std::int64_t frameDelta);
     /** @summary Changes a source gain for future processing. */
     Result SetSourceGain(SourceId id, float gain);
+    /** @summary Binds an opaque control target to an engine-owned source control. */
+    Result BindControl(
+        Automation::TargetHandle target,
+        SourceId source,
+        std::shared_ptr<Automation::IControlTarget> controlTarget);
+    /**
+     * @summary Publishes control events for consumption by future render blocks.
+     * @remarks Control-thread only; calls from the active render callback are rejected.
+     */
+    Result SubmitControls(const Automation::ControlBlock& block);
     /** @summary Pauses or resumes a source for future processing. */
     Result SetSourcePaused(SourceId id, bool paused);
     /** @summary Checks whether a source has reached EOF. */
@@ -79,6 +91,12 @@ private:
         AudioBuffer sourceScratch;
         AudioBuffer masterScratch;
         std::shared_ptr<const AudioEffectChain> effects;
+        struct ControlEvent {
+            std::uint32_t frameOffset = 0;
+            std::shared_ptr<Automation::IControlTarget> target;
+            float value = 0.0F;
+        };
+        std::shared_ptr<const std::vector<ControlEvent>> controls;
         float gain = 1.0F;
         bool paused = false;
         bool seekPending = false;
@@ -96,6 +114,12 @@ private:
     std::vector<std::shared_ptr<Entry>> retiredSources_;
     std::size_t maxSources_;
     SourceId nextId_ = 0;
+    struct ControlBinding {
+        SourceId source = 0;
+        std::shared_ptr<Automation::IControlTarget> target;
+    };
+    std::unordered_map<Automation::TargetHandle, ControlBinding> controlBindings_;
+    static thread_local AudioMixer* activeRenderMixer_;
     AudioStreamConfig masterConfig_;
     std::shared_ptr<const AudioEffectChain> masterEffects_;
     bool open_ = false;

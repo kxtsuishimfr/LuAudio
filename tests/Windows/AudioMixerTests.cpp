@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <memory>
 
@@ -20,6 +21,8 @@ public:
     Result Read(AudioBuffer& destination) override
     {
         ++readCount_;
+        if (readCallback_)
+            readCallback_();
         if (readFailure_) {
             return Result::Failure(ResultCode::ProcessingFailed, "Test reader read failed");
         }
@@ -98,6 +101,11 @@ public:
         readFailure_ = readFailure;
     }
 
+    void SetReadCallback(std::function<void()> callback)
+    {
+        readCallback_ = std::move(callback);
+    }
+
     std::size_t ReadCount() const noexcept
     {
         return readCount_;
@@ -119,6 +127,7 @@ private:
     float sampleValue_ = 0.0F;
     std::size_t readCount_ = 0;
     std::size_t seekCount_ = 0;
+    std::function<void()> readCallback_;
 };
 
 class MultiplyEffect final : public IAudioEffect {
@@ -138,6 +147,20 @@ public:
 
 private:
     float multiplier_;
+};
+
+class RecordingControlTarget final : public LuAudio::Automation::IControlTarget {
+public:
+    void Apply(std::uint32_t frameOffset, float value) noexcept override
+    {
+        lastFrameOffset = frameOffset;
+        lastValue = value;
+        ++applyCount;
+    }
+
+    std::uint32_t lastFrameOffset = 0;
+    float lastValue = 0.0F;
+    std::size_t applyCount = 0;
 };
 
 class TestBackend final : public IAudioBackend {
@@ -560,6 +583,30 @@ TEST(AudioMixerTests, ValidatesSourceOperations)
     readerPointer->SetEndOfFile(true);
     EXPECT_TRUE(mixer.IsSourceFinished(sourceId));
     EXPECT_EQ(mixer.RemoveSource(sourceId).Code(), ResultCode::Success);
+}
+
+TEST(AudioMixerTests, RejectsControlSubmissionFromRenderCallback)
+{
+    TestBackend backend;
+    AudioMixer mixer(backend, 1);
+    ASSERT_TRUE(mixer.Open({}).Succeeded());
+    auto reader = MakeReader();
+    auto* sourceReader = reader.get();
+    AudioMixer::SourceId sourceId = 0;
+    ASSERT_TRUE(mixer.AddSource(std::move(reader), sourceId).Succeeded());
+    auto target = std::make_shared<RecordingControlTarget>();
+    ASSERT_TRUE(mixer.BindControl(1, sourceId, target).Succeeded());
+
+    LuAudio::Automation::ControlEvent event{0, 1, 1.0F};
+    LuAudio::Automation::ControlBlock block{0, 2, &event, 1};
+    Result callbackResult = Result::Failure(ResultCode::InvalidState, "Callback was not called");
+    sourceReader->SetReadCallback([&]() {
+        callbackResult = mixer.SubmitControls(block);
+    });
+
+    AudioBuffer output({}, 2);
+    backend.Render(output);
+    EXPECT_EQ(callbackResult.Code(), ResultCode::InvalidState);
 }
 
 TEST(AudioMixerTests, CloseIsIdempotent)

@@ -4,11 +4,15 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <LuAudio/Audio/Rendering/OfflineRenderer.h>
 #include <LuAudio/Audio/Sinks/WavFileWriter.h>
 #include <LuAudio/Audio/Sources/OggFileReader.h>
+
+#include <LuAudio/Automation/AutomationSet.h>
+#include <LuAudio/Automation/AutomationTrack.h>
 
 namespace {
 
@@ -136,6 +140,16 @@ private:
     float multiplier_;
 };
 
+class RecordingControlTarget final : public LuAudio::Automation::IControlTarget {
+public:
+    void Apply(std::uint32_t frameOffset, float value) noexcept override
+    {
+        events.emplace_back(frameOffset, value);
+    }
+
+    std::vector<std::pair<std::uint32_t, float>> events;
+};
+
 std::uint32_t ReadUInt32(const std::vector<std::uint8_t>& bytes, std::size_t offset)
 {
     return static_cast<std::uint32_t>(bytes[offset]) |
@@ -255,6 +269,51 @@ TEST(OfflineRendererTests, MixesSourcesWithEffectsGainAndLongestDuration)
     EXPECT_FLOAT_EQ(sink.Samples()[3], -7.0F / 9.0F);
     EXPECT_FLOAT_EQ(sink.Samples()[4], 0.25F);
     EXPECT_FLOAT_EQ(sink.Samples()[5], 0.25F);
+}
+
+TEST(OfflineRendererTests, AppliesControlsAtTheSameFrameOffsetsAsRealtimeRendering)
+{
+    const AudioFormat format{48000, 1};
+    auto track = std::make_shared<LuAudio::Automation::AutomationTrack>(
+        LuAudio::Automation::TrackDescription{
+            LuAudio::Automation::ValueKind::Continuous,
+            LuAudio::Automation::Interpolation::Step,
+            0.0F,
+            4.0F});
+    ASSERT_TRUE(track->SetPoint(0, 0.0F));
+    ASSERT_TRUE(track->SetPoint(2, 2.0F));
+
+    auto controls = std::make_shared<LuAudio::Automation::AutomationSet>();
+    ASSERT_TRUE(controls->Set(11, track));
+    auto target = std::make_shared<RecordingControlTarget>();
+
+    OfflineRenderer::Source source;
+    source.reader = std::make_unique<VectorReader>(
+        format,
+        std::vector<float>{1.0F, 1.0F, 1.0F, 1.0F});
+    source.controls = controls;
+    source.controlBindings.push_back({11, target});
+
+    std::vector<OfflineRenderer::Source> sources;
+    sources.push_back(std::move(source));
+    VectorSink sink;
+    ASSERT_TRUE(OfflineRenderer::RenderSources(
+        std::move(sources),
+        format,
+        sink,
+        nullptr,
+        4).Succeeded());
+
+    ASSERT_EQ(sink.Samples().size(), 4U);
+    EXPECT_FLOAT_EQ(sink.Samples()[0], 1.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[1], 1.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[2], 1.0F);
+    EXPECT_FLOAT_EQ(sink.Samples()[3], 1.0F);
+    ASSERT_EQ(target->events.size(), 2U);
+    EXPECT_EQ(target->events[0].first, 0U);
+    EXPECT_FLOAT_EQ(target->events[0].second, 0.0F);
+    EXPECT_EQ(target->events[1].first, 2U);
+    EXPECT_FLOAT_EQ(target->events[1].second, 2.0F);
 }
 
 TEST(WavFileWriterTests, RejectsMismatchedBufferFormat)

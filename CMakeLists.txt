@@ -56,6 +56,7 @@ set(LUAUDIO_CORE_SOURCES
     "src/Audio/Playback/AudioPlayer.cpp"
     "src/Audio/Processing/AudioBuffer.cpp"
     "src/Audio/Processing/AudioEffectChain.cpp"
+    "src/Automation/Automation.cpp"
     "src/Audio/Sinks/OggFileWriter.cpp"
     "src/Audio/Sinks/WavFileWriter.cpp"
     "src/Audio/Sources/AudioFile.cpp"
@@ -76,6 +77,9 @@ set(LUAUDIO_CORE_SOURCES
     "include/LuAudio/Audio/Sinks/OggFileWriter.h"
     "include/LuAudio/Audio/Sinks/WavFileWriter.h"
     "include/LuAudio/Audio/Contracts/IAudioEffect.h"
+    "include/LuAudio/Audio/Contracts/Automation.h"
+    "include/LuAudio/Automation/AutomationTrack.h"
+    "include/LuAudio/Automation/AutomationSet.h"
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/Mp3FileReader.h"
     "include/LuAudio/Audio/Sources/OggFileReader.h"
@@ -306,6 +310,15 @@ if (BUILD_TESTING AND WIN32)
     )
     target_compile_features(LuAudioPluginSdkTests PRIVATE cxx_std_20)
 
+    add_executable(LuAudioAutomationTests
+        "tests/Windows/AutomationTests.cpp"
+    )
+    target_link_libraries(LuAudioAutomationTests PRIVATE
+        LuAudioCore
+        GTest::gtest_main
+    )
+    target_compile_features(LuAudioAutomationTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioOrderSensitiveEffectOrderTest
         "tests/Windows/Plugins/EffectOrderingTest.cpp"
     )
@@ -353,6 +366,7 @@ if (BUILD_TESTING AND WIN32)
     gtest_discover_tests(LuAudioProviderTests)
     gtest_discover_tests(LuAudioPluginTests)
     gtest_discover_tests(LuAudioPluginSdkTests)
+    gtest_discover_tests(LuAudioAutomationTests)
     gtest_discover_tests(LuAudioMixerTests)
     gtest_discover_tests(LuAudioOfflineRenderingTests)
     gtest_discover_tests(LuAudioOfflineRendererStressTests)
@@ -415,6 +429,8 @@ endif()
 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/sdk/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/Automation/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/Automation")
 install(FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LuAudioPlugin.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LuAudioPluginSDK")

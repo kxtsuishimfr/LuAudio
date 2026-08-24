@@ -7,9 +7,25 @@ namespace LuAudio::Audio {
 
 void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
 {
+    struct RenderThreadGuard final {
+        AudioMixer* previous;
+
+        explicit RenderThreadGuard(AudioMixer* mixer)
+            : previous(activeRenderMixer_)
+        {
+            activeRenderMixer_ = mixer;
+        }
+
+        ~RenderThreadGuard()
+        {
+            activeRenderMixer_ = previous;
+        }
+    } renderThreadGuard(this);
+
     struct SourceSnapshot {
         std::shared_ptr<Entry> entry;
         std::shared_ptr<const AudioEffectChain> effects;
+        std::shared_ptr<const std::vector<AudioMixer::Entry::ControlEvent>> controls;
         float gain = 1.0F;
         bool paused = false;
         bool seekPending = false;
@@ -26,6 +42,7 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
             sources.push_back({
                 entry,
                 entry->effects,
+                entry->controls,
                 entry->gain,
                 entry->paused,
                 entry->seekPending,
@@ -66,6 +83,18 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
         }
         source->renderedPosition.store(source->reader->Position(), std::memory_order_release);
 
+        float sourceGain = sourceSnapshot.gain;
+        if (sourceSnapshot.controls) {
+            for (const auto& control : *sourceSnapshot.controls) {
+                if (control.frameOffset >= frameCount)
+                    break;
+                control.target->Apply(control.frameOffset, control.value);
+                float controlledValue = sourceGain;
+                if (control.target->TryGetValue(controlledValue))
+                    sourceGain = controlledValue;
+            }
+        }
+
         const std::size_t sourceChannelCount = source->sourceScratch.Format().channelCount;
         const std::size_t sourceFrameCount = std::min(frameCount, source->sourceScratch.FrameCount());
         float* remappedSamples = source->masterScratch.Data();
@@ -89,10 +118,12 @@ void AudioMixer::Render(AudioBuffer& masterBuffer) noexcept
             continue;
         }
 
-        const std::size_t sampleCount = sourceFrameCount * masterChannelCount;
         float* masterSamples = masterBuffer.Data();
-        for (std::size_t sample = 0; sample < sampleCount; ++sample) {
-            masterSamples[sample] += remappedSamples[sample] * sourceSnapshot.gain;
+        for (std::size_t frame = 0; frame < sourceFrameCount; ++frame) {
+            for (std::size_t channel = 0; channel < masterChannelCount; ++channel) {
+                const std::size_t sample = frame * masterChannelCount + channel;
+                masterSamples[sample] += remappedSamples[sample] * sourceGain;
+            }
         }
     }
 

@@ -3,7 +3,6 @@
 
 #include <vorbis/vorbisfile.h>
 
-#include <algorithm>
 #include <limits>
 
 namespace LuAudio::Audio {
@@ -104,192 +103,67 @@ private:
 }
 
 OggFileReader::OggFileReader(std::unique_ptr<IAudioDecoder> decoder)
-    : decoder_(decoder != nullptr ? std::move(decoder) : std::make_unique<VorbisDecoder>())
+    : reader_(decoder != nullptr ? std::move(decoder) : std::make_unique<VorbisDecoder>())
 {
 }
 
-OggFileReader::~OggFileReader() { StopWorker(); }
+OggFileReader::~OggFileReader()
+{
+}
 
 Result OggFileReader::Open(const AudioFile& file)
 {
-    StopWorker();
-    {
-        std::lock_guard lock(mutex_);
-        open_ = false;
-        format_ = {};
-        frameCount_ = 0;
-        readFrame_ = 0;
-        bufferedSamples_.clear();
-        seekPending_ = false;
-    }
-    if (!decoder_) {
-        return Result::Failure(ResultCode::InvalidState, "Ogg decoder is not available");
-    }
-    if (!file.IsValid() || file.Type() != AudioFileType::Ogg) {
-        return Result::Failure(ResultCode::InvalidArgument, "Audio file is not Ogg");
-    }
-
-    DecoderInfo info;
-    const Result result = decoder_->Open(file, info);
-    if (!result.Succeeded()) {
-        return result;
-    }
-    if (!info.format.IsValid() || info.format.sampleType != SampleType::Float32 ||
-        info.format.channelLayout != ChannelLayout::Interleaved || info.format.channelCount == 0) {
-        return Result::Failure(ResultCode::ProcessingFailed,
-            "Ogg decoder returned invalid stream metadata");
-    }
-    {
-        std::lock_guard lock(mutex_);
-        format_ = info.format;
-        frameCount_ = info.frameCount;
-        stopRequested_ = false;
-        decoderEnd_ = false;
-        open_ = true;
-    }
-    worker_ = std::thread(&OggFileReader::DecodeWorker, this);
-    return Result::Success();
-}
-
-void OggFileReader::StopWorker() noexcept
-{
-    {
-        std::lock_guard lock(mutex_);
-        stopRequested_ = true;
-    }
-    condition_.notify_all();
-    if (worker_.joinable()) {
-        worker_.join();
-    }
-}
-
-void OggFileReader::DecodeWorker()
-{
-    while (true) {
-        std::uint64_t seekFrame = 0;
-        bool performSeek = false;
-        {
-            std::unique_lock lock(mutex_);
-            condition_.wait(lock, [this] {
-                return stopRequested_ || seekPending_ ||
-                    (!decoderEnd_ && bufferedSamples_.size() <
-                        kDecodeChunkFrames * kBufferedChunks * format_.channelCount);
-            });
-            if (stopRequested_) {
-                return;
-            }
-            if (seekPending_) {
-                seekFrame = pendingSeek_;
-                seekPending_ = false;
-                bufferedSamples_.clear();
-                decoderEnd_ = false;
-                performSeek = true;
-            }
-        }
-        if (performSeek && !decoder_->Seek(seekFrame).Succeeded()) {
-            std::lock_guard lock(mutex_);
-            decoderEnd_ = true;
-            condition_.notify_all();
-            continue;
-        }
-        std::vector<float> decoded;
-        std::size_t framesRead = 0;
-        if (!decoder_->Read(decoded, kDecodeChunkFrames, framesRead).Succeeded() || framesRead == 0) {
-            std::lock_guard lock(mutex_);
-            decoderEnd_ = true;
-            condition_.notify_all();
-            continue;
-        }
-        {
-            std::lock_guard lock(mutex_);
-            bufferedSamples_.insert(bufferedSamples_.end(), decoded.begin(), decoded.end());
-        }
-        condition_.notify_all();
-    }
+    return reader_.Open(file, AudioFileType::Ogg);
 }
 
 Result OggFileReader::Read(AudioBuffer& destination)
 {
-    std::lock_guard lock(mutex_);
-    if (!open_) {
-        return Result::Failure(ResultCode::InvalidState, "Ogg file is not open");
-    }
-    if (destination.Format().sampleRate != format_.sampleRate ||
-        destination.Format().channelCount != format_.channelCount ||
-        destination.Format().sampleType != format_.sampleType ||
-        destination.Format().channelLayout != format_.channelLayout) {
-        return Result::Failure(ResultCode::InvalidArgument,
-            "Audio buffer format does not match Ogg format");
-    }
-    const std::size_t availableFrames = bufferedSamples_.size() / format_.channelCount;
-    const std::size_t framesToCopy = std::min(availableFrames, destination.FrameCount());
-    const std::size_t sampleCount = framesToCopy * format_.channelCount;
-    for (std::size_t index = 0; index < sampleCount; ++index) {
-        destination.Data()[index] = bufferedSamples_.front();
-        bufferedSamples_.pop_front();
-    }
-    if (framesToCopy < destination.FrameCount()) {
-        std::fill(destination.Data() + sampleCount,
-            destination.Data() + destination.SampleCount(), 0.0F);
-    }
-    readFrame_ += framesToCopy;
-    condition_.notify_all();
-    return Result::Success();
+    return reader_.Read(destination);
 }
 
-Result OggFileReader::Rewind() { return Seek(0); }
+Result OggFileReader::Rewind()
+{
+    return reader_.Rewind();
+}
 
 Result OggFileReader::Seek(std::uint64_t frame)
 {
-    std::lock_guard lock(mutex_);
-    if (!open_) {
-        return Result::Failure(ResultCode::InvalidState, "Ogg file is not open");
-    }
-    if (frame > frameCount_) {
-        return Result::Failure(ResultCode::InvalidArgument,
-            "Ogg seek position is outside the file");
-    }
-    pendingSeek_ = frame;
-    seekPending_ = true;
-    readFrame_ = frame;
-    bufferedSamples_.clear();
-    decoderEnd_ = false;
-    condition_.notify_all();
-    return Result::Success();
+    return reader_.Seek(frame);
 }
 
 bool OggFileReader::IsOpen() const noexcept
 {
-    std::lock_guard lock(mutex_);
-    return open_;
+    return reader_.IsOpen();
 }
 
 bool OggFileReader::EndOfFile() const noexcept
 {
-    std::lock_guard lock(mutex_);
-    return open_ && decoderEnd_ && bufferedSamples_.empty();
+    return reader_.EndOfFile();
 }
 
 std::uint64_t OggFileReader::Position() const noexcept
 {
-    std::lock_guard lock(mutex_);
-    return readFrame_;
+    return reader_.Position();
 }
 
-const AudioFormat& OggFileReader::Format() const noexcept { return format_; }
+const AudioFormat& OggFileReader::Format() const noexcept
+{
+    return reader_.Format();
+}
 
 std::uint64_t OggFileReader::FrameCount() const noexcept
 {
-    std::lock_guard lock(mutex_);
-    return frameCount_;
+    return reader_.FrameCount();
 }
 
 std::uint64_t OggFileReader::FramesRemaining() const noexcept
 {
-    std::lock_guard lock(mutex_);
-    return frameCount_ > readFrame_ ? frameCount_ - readFrame_ : 0;
+    return reader_.FramesRemaining();
 }
 
-bool OggFileReader::CanSeek() const noexcept { return IsOpen(); }
+bool OggFileReader::CanSeek() const noexcept
+{
+    return reader_.CanSeek();
+}
 
 }

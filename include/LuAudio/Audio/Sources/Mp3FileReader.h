@@ -14,6 +14,7 @@
 #include <deque>
 #include <mutex>
 #include <thread>
+#include <LuAudio/Audio/Sources/StreamingAudioReader.h>
 
 namespace LuAudio::Audio {
 
@@ -90,22 +91,7 @@ public:
     bool CanSeek() const noexcept override;
 
 private:
-    void StopWorker() noexcept;
-    void DecodeWorker();
-
-    std::unique_ptr<IAudioDecoder> decoder_;
-    AudioFormat format_;
-    std::uint64_t frameCount_ = 0;
-    std::uint64_t readFrame_ = 0;
-    std::deque<float> bufferedSamples_;
-    std::uint64_t pendingSeek_ = 0;
-    bool seekPending_ = false;
-    std::thread worker_;
-    mutable std::mutex mutex_;
-    std::condition_variable condition_;
-    std::atomic<bool> stopRequested_ = false;
-    std::atomic<bool> decoderEnd_ = false;
-    bool open_ = false;
+    StreamingAudioReader reader_;
 };
 
 }

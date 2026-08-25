@@ -7,6 +7,7 @@
 #include <LuAudio/Audio/Processing/AudioBuffer.h>
 #include <LuAudio/Audio/Sources/AudioFile.h>
 #include <LuAudio/Audio/Sources/IAudioReader.h>
+#include <LuAudio/Audio/Sources/StreamingAudioReader.h>
 
 namespace LuAudio::Audio {
 
@@ -16,7 +17,8 @@ namespace LuAudio::Audio {
 class WavFileReader final : public IAudioReader {
 public:
     /** @summary Creates a closed reader. */
-    WavFileReader() = default;
+    WavFileReader();
+    ~WavFileReader() override;
 
     /**
      * @summary Opens a described audio file.
@@ -83,10 +85,7 @@ public:
     bool CanSeek() const noexcept override;
 
 private:
-    AudioFormat format_;
-    std::vector<float> samples_;
-    std::size_t readFrame_ = 0;
-    bool open_ = false;
+    std::unique_ptr<StreamingAudioReader> reader_;
 };
 
 }

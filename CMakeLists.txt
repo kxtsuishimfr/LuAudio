@@ -62,6 +62,7 @@ set(LUAUDIO_CORE_SOURCES
     "src/Audio/Sources/AudioFile.cpp"
     "src/Audio/Sources/Mp3FileReader.cpp"
     "src/Audio/Sources/OggFileReader.cpp"
+    "src/Audio/Sources/StreamingAudioReader.cpp"
     "src/Audio/Sources/WavFileReader.cpp"
     "src/Utils/Diagnostics/Log.cpp"
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
@@ -83,6 +84,7 @@ set(LUAUDIO_CORE_SOURCES
     "include/LuAudio/Audio/Sources/AudioFile.h"
     "include/LuAudio/Audio/Sources/Mp3FileReader.h"
     "include/LuAudio/Audio/Sources/OggFileReader.h"
+    "include/LuAudio/Audio/Sources/StreamingAudioReader.h"
     "include/LuAudio/Audio/Sources/WavFileReader.h"
     "include/LuAudio/Audio/Sources/IAudioReader.h"
     "include/LuAudio/Audio/Contracts/IAudioDecoder.h"
@@ -355,6 +357,15 @@ if (BUILD_TESTING AND WIN32)
     )
     target_compile_features(LuAudioOggFileReaderStressTests PRIVATE cxx_std_20)
 
+    add_executable(LuAudioStreamingAudioReaderStressTests
+        "tests/Windows/StreamingAudioReaderStressTests.cpp"
+    )
+    target_link_libraries(LuAudioStreamingAudioReaderStressTests PRIVATE
+        LuAudioCore
+        GTest::gtest_main
+    )
+    target_compile_features(LuAudioStreamingAudioReaderStressTests PRIVATE cxx_std_20)
+
     add_executable(LuAudioProviderTests
         "tests/Windows/Wasapi/WasapiBackendTests.cpp"
         "tests/Windows/Wasapi/WasapiDeviceTests.cpp"
@@ -371,6 +382,7 @@ if (BUILD_TESTING AND WIN32)
     gtest_discover_tests(LuAudioOfflineRenderingTests)
     gtest_discover_tests(LuAudioOfflineRendererStressTests)
     gtest_discover_tests(LuAudioOggFileReaderStressTests)
+    gtest_discover_tests(LuAudioStreamingAudioReaderStressTests)
 
     add_executable(LuAudioWasapiSilenceTest
         "tests/Windows/Wasapi/WasapiSilenceTest.cpp"

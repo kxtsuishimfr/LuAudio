@@ -11,6 +11,14 @@ LuAudio::Audio::AudioStreamConfig ValidConfig()
 
 }
 
+TEST(WasapiBackendTests, CreateBackendReturnsDefaultBackend)
+{
+    const auto backend = LuAudio::Audio::CreateBackend();
+
+    ASSERT_NE(backend, nullptr);
+    EXPECT_NE(dynamic_cast<LuAudio::Providers::Windows::Wasapi::WasapiBackend*>(backend.get()), nullptr);
+}
+
 TEST(WasapiBackendTests, InvalidConfig)
 {
     LuAudio::Providers::Windows::Wasapi::WasapiBackend backend;

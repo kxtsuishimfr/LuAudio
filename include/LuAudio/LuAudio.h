@@ -34,6 +34,7 @@
 
 #include <LuAudio/Common.h>
 
+#include <LuAudio/Audio/Contracts/AudioBackendFactory.h>
 #include <LuAudio/Audio/Playback/AudioMixer.h>
 #include <LuAudio/Audio/Playback/AudioPlayer.h>
 #include <LuAudio/Audio/Contracts/AudioFormat.h>

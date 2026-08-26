@@ -69,8 +69,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    Providers::Windows::Wasapi::WasapiBackend backend;
-    Audio::AudioPlayer player(backend);
+    auto backend = Audio::CreateBackend();
+    Audio::AudioPlayer player(*backend);
     Audio::AudioStreamConfig requestedConfig;
     requestedConfig.format = reader->Format();
 
@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
 
     const auto startResult = player.Start();
     if (!startResult.Succeeded()) {
-        std::cerr << "WASAPI start failed: " << startResult.Message() << '\n';
+        std::cerr << "Audio backend start failed: " << startResult.Message() << '\n';
         player.Close();
         return 1;
     }
@@ -160,7 +160,7 @@ int main(int argc, char* argv[])
     const auto stopResult = player.Stop();
     player.Close();
     if (!stopResult.Succeeded()) {
-        std::cerr << "WASAPI stop failed: " << stopResult.Message() << '\n';
+        std::cerr << "Audio backend stop failed: " << stopResult.Message() << '\n';
         return 1;
     }
     return 0;

@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BUILD_DIR = PROJECT_ROOT / "out" / "build" / "wasapi-tests"
-DEFAULT_AUDIO_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_3.ogg"
+DEFAULT_AUDIO_FILE = PROJECT_ROOT / "tests" / "Audios" / "sample_4.ogg"
 TARGET_NAME = "LuAudioWasapiSeekPlaybackTest"
 
 

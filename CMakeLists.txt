@@ -67,6 +67,7 @@ set(LUAUDIO_CORE_SOURCES
     "src/Utils/Diagnostics/Log.cpp"
     "include/LuAudio/Audio/Contracts/AudioFormat.h"
     "include/LuAudio/Audio/Contracts/AudioStreamConfig.h"
+    "include/LuAudio/Audio/Contracts/AudioBackendFactory.h"
     "include/LuAudio/Audio/Contracts/IAudioBackend.h"
     "include/LuAudio/Audio/Contracts/IAudioSink.h"
     "include/LuAudio/Audio/Contracts/Result.h"
@@ -146,6 +147,7 @@ if (WIN32)
     add_library(LuAudioWindowsProvider SHARED
         "src/Providers/Windows/WAudioDecoder.cpp"
         "src/Providers/Windows/WPluginProvider.cpp"
+        "src/Providers/Windows/WAudioFactory.cpp"
         "src/Providers/Windows/Wasapi/WasapiBackend.cpp"
         "src/Providers/Windows/Wasapi/WasapiDevice.cpp"
         "include/LuAudio/Providers/Windows/WAudioDecoder.h"
@@ -190,6 +192,7 @@ if (ANDROID)
     add_library(LuAudioAndroidProvider SHARED
         "src/Providers/Android/AAudioDecoder.cpp"
         "src/Providers/Android/APluginProvider.cpp"
+        "src/Providers/Android/AAudioFactory.cpp"
         "src/Providers/Android/Oboe/OboeBackend.cpp"
         "include/LuAudio/Providers/Android/AAudioDecoder.h"
         "include/LuAudio/Providers/Android/APluginProvider.h"

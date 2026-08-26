@@ -222,6 +222,19 @@ TEST(OfflineRendererStressTests, AbortsWhenEffectsProduceNonFiniteSamples)
     EXPECT_TRUE(sink.Aborted());
 }
 
+TEST(OfflineRendererStressTests, AbortsWhenSourceContainsNonFiniteSamples)
+{
+    OfflineRenderer::Source source;
+    source.reader = MakeReader(
+        AudioFormat{}, 2, std::numeric_limits<float>::quiet_NaN());
+
+    TestSink sink;
+    const auto result = OfflineRenderer::RenderSources(
+        SingleSource(std::move(source)), AudioFormat{}, sink, nullptr, 2);
+    EXPECT_EQ(result.Code(), ResultCode::ProcessingFailed);
+    EXPECT_TRUE(sink.Aborted());
+}
+
 TEST(OfflineRendererStressTests, PropagatesSinkFailuresAndAborts)
 {
     OfflineRenderer::Source source;

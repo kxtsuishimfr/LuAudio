@@ -211,16 +211,10 @@ Result OfflineRenderer::RenderSources(
                     }
                 }
             }
-
-            if (source.effects && !source.effects->Process(remapped)) {
-                sink.Abort();
-                return Result::Failure(ResultCode::ProcessingFailed,
-                    "Offline source effect processing failed");
-            }
             if (!HasOnlyFiniteSamples(remapped)) {
                 sink.Abort();
                 return Result::Failure(ResultCode::ProcessingFailed,
-                    "Offline source effect produced a non-finite sample");
+                    "Offline source contains a non-finite sample");
             }
 
             std::vector<Automation::ControlEvent> controls;
@@ -236,6 +230,7 @@ Result OfflineRenderer::RenderSources(
             }
 
             std::size_t controlIndex = 0;
+            AudioBuffer processed(outputFormat, 1);
             for (std::size_t frame = 0; frame < framesRead; ++frame) {
                 while (controlIndex < controls.size() &&
                     controls[controlIndex].frameOffset <= frame) {
@@ -248,9 +243,24 @@ Result OfflineRenderer::RenderSources(
                     ++controlIndex;
                 }
 
+                processed.Resize(1);
+                for (std::size_t channel = 0; channel < outputFormat.channelCount; ++channel)
+                    processed.Data()[channel] = remapped.Data()[frame * outputFormat.channelCount + channel];
+
+                if (source.effects && !source.effects->Process(processed)) {
+                    sink.Abort();
+                    return Result::Failure(ResultCode::ProcessingFailed,
+                        "Offline source effect processing failed");
+                }
+                if (!HasOnlyFiniteSamples(processed)) {
+                    sink.Abort();
+                    return Result::Failure(ResultCode::ProcessingFailed,
+                        "Offline source effect produced a non-finite sample");
+                }
+
                 for (std::size_t channel = 0; channel < outputFormat.channelCount; ++channel) {
                     const std::size_t sample = frame * outputFormat.channelCount + channel;
-                    master.Data()[sample] += remapped.Data()[sample] * source.gain;
+                    master.Data()[sample] += processed.Data()[channel] * source.gain;
                 }
             }
         }

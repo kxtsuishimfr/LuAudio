@@ -74,3 +74,9 @@
 #include <LuAudio/Providers/Android/APluginProvider.h>
 #include <LuAudio/Providers/Android/Oboe/OboeBackend.h>
 #endif
+
+#if defined(__linux__) || defined(__unix__)
+#include <LuAudio/Providers/Linux/LAudioDecoder.h>
+#include <LuAudio/Providers/Linux/LPluginProvider.h>
+#include <LuAudio/Providers/Linux/PipeWire/PipeWireBackend.h>
+#endif

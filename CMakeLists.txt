@@ -20,6 +20,12 @@ set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "Disable vendored CMake package 
 add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Ogg" "${CMAKE_CURRENT_BINARY_DIR}/ogg-build" EXCLUDE_FROM_ALL)
 add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/Vorbis" "${CMAKE_CURRENT_BINARY_DIR}/vorbis-build" EXCLUDE_FROM_ALL)
 
+if (UNIX AND NOT APPLE AND NOT ANDROID)
+    set_target_properties(ogg vorbis vorbisenc vorbisfile
+        PROPERTIES POSITION_INDEPENDENT_CODE ON
+    )
+endif()
+
 option(LUAUDIO_ANDROID_TESTS "Build the Android test runner" OFF)
 set(LUAUDIO_ANDROID_TEST_SOURCE
     "${PROJECT_SOURCE_DIR}/tests/Android/app/src/main/cpp/AndroidTestMain.cpp"
@@ -172,6 +178,51 @@ if (WIN32)
     add_library(LuAudio::Core ALIAS LuAudioCore)
     add_library(LuAudio::PluginHost ALIAS LuAudioPluginHost)
     add_library(LuAudio::WindowsProvider ALIAS LuAudioWindowsProvider)
+endif()
+
+if (UNIX AND NOT APPLE AND NOT ANDROID)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
+    pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0)
+    pkg_check_modules(GSTREAMER_APP REQUIRED IMPORTED_TARGET gstreamer-app-1.0)
+
+    add_library(LuAudioLinuxProvider SHARED
+        "src/Providers/Linux/LAudioDecoder.cpp"
+        "src/Providers/Linux/LPluginProvider.cpp"
+        "src/Providers/Linux/PipeWire/PipeWireBackend.cpp"
+        "src/Providers/Linux/LAudioFactory.cpp"
+        "include/LuAudio/Providers/Linux/LAudioDecoder.h"
+        "include/LuAudio/Providers/Linux/LPluginProvider.h"
+        "include/LuAudio/Providers/Linux/PipeWire/PipeWireBackend.h"
+    )
+    target_include_directories(LuAudioLinuxProvider PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_link_libraries(LuAudioLinuxProvider PRIVATE
+        LuAudioCore PkgConfig::PIPEWIRE PkgConfig::GSTREAMER
+        PkgConfig::GSTREAMER_APP ${CMAKE_DL_LIBS}
+    )
+    target_compile_features(LuAudioLinuxProvider PRIVATE cxx_std_20)
+    set_target_properties(LuAudioLinuxProvider PROPERTIES
+        OUTPUT_NAME "LPluginProvider"
+    )
+
+    add_executable(LuAudioPipeWireSeekPlaybackTest
+        "tests/Linux/PipeWire/PipeWireSeekPlaybackTest.cpp"
+    )
+    target_include_directories(LuAudioPipeWireSeekPlaybackTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    )
+    target_link_libraries(LuAudioPipeWireSeekPlaybackTest PRIVATE
+        LuAudioCore LuAudioLinuxProvider
+    )
+    target_compile_features(LuAudioPipeWireSeekPlaybackTest PRIVATE cxx_std_20)
+
+    add_library(LuAudio INTERFACE)
+    target_link_libraries(LuAudio INTERFACE LuAudioCore LuAudioLinuxProvider)
+    add_library(LuAudio::Core ALIAS LuAudioCore)
+    add_library(LuAudio::PluginHost ALIAS LuAudioPluginHost)
+    add_library(LuAudio::LinuxProvider ALIAS LuAudioLinuxProvider)
 endif()
 
 if (ANDROID)
